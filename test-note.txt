@@ -1,0 +1,72 @@
+address to test
+17 Lime Street, Sydney NSW, Australia
+
+------------------
+
+// form body request
+$.ajax({
+    url: '/search',
+    type: 'post',
+    data: {
+      "type": "circle",
+      "distance": "200m",
+      "location": {
+        "lat": "-37.852",
+        "lon": 144.993165
+      }
+    }
+}).then(console.log);
+
+
+// json body request
+$.ajax({
+    url: '/search',
+    type: 'post',
+    data: JSON.stringify({
+        "type": "rectangle",
+        "top_left": {
+            "lat": -37.8,
+            "lon": 144.9
+        },
+        "bottom_right": {
+            "lat": -38,
+            "lon": 145
+        }
+    }),
+    headers: {
+        'content-type': 'application/json'
+    }
+}).then(console.log);
+
+// form body request
+$.ajax({
+    url: '/search',
+    type: 'post',
+    data: {
+        "type": "rectangle",
+        "top_left": {
+            "lat": -37.8,
+            "lon": 144.9
+        },
+        "bottom_right": {
+            "lat": -38,
+            "lon": 145
+        }
+    }
+}).then(console.log);
+
+
+fetch('/search', { method:'post', body:'index=restaurants&type=circle&distance=6437.376m&location[lat]=-28.508105072281968&location[lng]=153.5213398314084', headers: { 'content-type':'application/x-www-form-urlencoded' } })
+
+fetch('/search', { method:'post', body: JSON.stringify({
+    "type": "rectangle",
+    "top_left": {
+        "lat": -37.8,
+        "lon": 144.9
+    },
+    "bottom_right": {
+        "lat": -38,
+        "lon": 145
+    }
+}), headers: { 'content-type':'application/json' } })
+

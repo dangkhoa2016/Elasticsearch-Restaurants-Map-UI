@@ -1,0 +1,17 @@
+<div id='container'>
+  <div class='row'>
+    <div id='nav' class='offset-1 col-10 offset-sm-2 offset-md-3 offset-lg-4 col-sm-8 col-md-6 col-lg-4 py-3 rounded'>
+      <input type='text' class='form-control form-control-sm mb-2' id='txt-address' aria-describedby='address' placeholder='Enter your address' />
+      <div class='d-flex justify-content-between'>
+        <button class='btn btn-sm btn-secondary' type='button' data-bs-toggle='offcanvas' data-bs-target='#advanced-panel' aria-controls='offcanvasScrolling'>Advanced</button>
+        <a id='toggle-panel' href='javascript:void(0);' class='text-black'><i class='bi-arrow-up-circle-fill' style='font-size: 1.4rem;'></i></a>
+        <div>
+          <button type='button' id='btn-clear' class='btn btn-sm btn-warning me-1'>Clear</button>
+          <button type='button' id='btn-search' class='btn btn-sm btn-primary'>Search</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id='map'></div>
+</div>

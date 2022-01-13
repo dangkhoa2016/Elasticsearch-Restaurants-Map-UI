@@ -1,0 +1,88 @@
+<div class='offcanvas offcanvas-start' data-bs-scroll='true' data-bs-backdrop='false'
+  tabindex='-1' id='advanced-panel' aria-labelledby='advanced-panelLabel'>
+  <div class='offcanvas-header'>
+    <h5 class='offcanvas-title' id='advanced-panelLabel'>Advanced search</h5>
+    <button type='button' class='btn-close text-reset' data-bs-dismiss='offcanvas' aria-label='Close'></button>
+  </div>
+
+  <div class='offcanvas-body'>
+    <div class='mb-3'>
+      <label for='txt-point' autocomplete='off' class='form-label'>Point (lat, long)</label>
+      <input type='text' class='form-control form-control-sm'
+        id='txt-point' aria-describedby='pointHelp' />
+      <div id='pointHelp' class='form-text'>Google latitude and longitude</div>
+    </div>
+
+    <div class='mb-3'>
+      <label class='form-label' for='sel-enlarge-type'>Enlarge type</label>
+      <select class='form-select form-select-sm' aria-label='' id='sel-enlarge-type'>
+        <option value='circle'>Circle</option>
+        <option value='rectangle'>Rectangle</option>
+      </select>
+    </div>
+
+    <div class='mb-3 distance circle'>
+      <label for='txt-distance' autocomplete='off' class='form-label'>Distance</label>
+      <div class='input-group' id='grp-distance'>
+        <input type='number' class='form-control form-control-sm' id='txt-distance'
+          aria-describedby='distanceHelp' />
+        <button class='btn btn-secondary btn-sm dropdown-toggle' type='button'
+          data-bs-toggle='dropdown' aria-expanded='false'></button>
+        <ul class='dropdown-menu dropdown-menu-end'>
+          <li><a class='dropdown-item' data-value='miles' href='javascript:void(0);'>Miles</a></li>
+          <li><a class='dropdown-item' data-value='km' href='javascript:void(0);'>Kilometers</a></li>
+          <li><a class='dropdown-item' data-value='m' href='javascript:void(0);'>Meters</a></li>
+          <li><a class='dropdown-item' data-value='feet' href='javascript:void(0);'>Feet</a></li>
+        </ul>
+      </div>
+      <div id='distanceHelp' class='form-text'>Distance from center point</div>
+    </div>
+
+    <div class='mb-3 distance rectangle d-none'>
+      <label for='txt-horizontal' autocomplete='off' class='form-label'>Horizontal</label>
+      <div class='input-group' id='grp-horizontal'>
+        <input type='number' class='form-control form-control-sm' id='txt-horizontal'
+          aria-describedby='horizontalHelp' />
+        <button class='btn btn-secondary btn-sm dropdown-toggle' type='button'
+          data-bs-toggle='dropdown' aria-expanded='false'></button>
+        <ul class='dropdown-menu dropdown-menu-end'>
+          <li><a class='dropdown-item' data-value='miles' href='javascript:void(0);'>Miles</a></li>
+          <li><a class='dropdown-item' data-value='km' href='javascript:void(0);'>Kilometers</a></li>
+          <li><a class='dropdown-item' data-value='m' href='javascript:void(0);'>Meters</a></li>
+          <li><a class='dropdown-item' data-value='feet' href='javascript:void(0);'>Feet</a></li>
+        </ul>
+      </div>
+      <div id='horizontalHelp' class='form-text'>Distance from center point by horizontal</div>
+    </div>
+
+    <div class='mb-3 distance rectangle d-none'>
+      <label for='txt-vertical' autocomplete='off' class='form-label'>Vertical</label>
+      <div class='input-group' id='grp-vertical'>
+        <input type='number' class='form-control form-control-sm' id='txt-vertical'
+          aria-describedby='verticalHelp' />
+        <button class='btn btn-secondary btn-sm dropdown-toggle' type='button'
+          data-bs-toggle='dropdown' aria-expanded='false'></button>
+        <ul class='dropdown-menu dropdown-menu-end'>
+          <li><a class='dropdown-item' data-value='miles' href='javascript:void(0);'>Miles</a></li>
+          <li><a class='dropdown-item' data-value='km' href='javascript:void(0);'>Kilometers</a></li>
+          <li><a class='dropdown-item' data-value='m' href='javascript:void(0);'>Meters</a></li>
+          <li><a class='dropdown-item' data-value='feet' href='javascript:void(0);'>Feet</a></li>
+        </ul>
+      </div>
+      <div id='verticalHelp' class='form-text'>Distance from center point by vertical</div>
+    </div>
+
+    <div>
+      <button type='button' id='btn-reset' class='btn btn-sm btn-danger float-start'>Reset to default</button>
+      <div class='float-end'>
+        <a id='btn-help' title='how to use' href='javascript:void(0);' class='text-info me-2'>
+          <i class='bi-question-circle-fill' style='font-size: 1.8rem;'></i>
+        </a>
+        <a id='btn-result' title='show search result information'
+          href='javascript:void(0);' class='text-success'>
+          <i class='bi-back' style='font-size: 1.8rem;'></i>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>

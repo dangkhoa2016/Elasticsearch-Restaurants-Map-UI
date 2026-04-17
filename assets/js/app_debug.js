@@ -62,6 +62,8 @@ var arr_restaurants = [];
 var search_result_message = '';
 var max_search_results = runtimeConfig.maxSearchResults || 80;
 var autocomplete_country_restriction = runtimeConfig.autocompleteCountryRestriction || '';
+var history_storage_key = 'er_search_history';
+var max_history_items = 8;
 
 // Cached jQuery DOM references (populated in init_other)
 var $sel_enlarge_type = null;
@@ -169,6 +171,67 @@ function build_restaurant_info_content(markerData) {
     '<img src="' + escape_html(markerData.photo) + '" class="float-start me-3 iw-img" alt="' + markerData.title + '">' +
     '<div>' + markerData.description + '</div>' +
     '</div></div>';
+}
+
+function load_search_history() {
+  try {
+    var raw = localStorage.getItem(history_storage_key);
+    var parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function save_to_history(address, latLng) {
+  if (!address || !latLng) return;
+  var history = load_search_history();
+  history = history.filter(function (h) { return h.address !== address; });
+  history.unshift({ address: address, lat: latLng.lat(), lng: latLng.lng() });
+  history = history.slice(0, max_history_items);
+  try {
+    localStorage.setItem(history_storage_key, JSON.stringify(history));
+  } catch (e) { /* storage full or unavailable */ }
+  render_search_history();
+}
+
+function render_search_history() {
+  var history = load_search_history();
+  var $container = $('#search-history');
+  var $list = $('#history-list');
+  if (!$container.length) return;
+  $list.empty();
+  if (history.length === 0) {
+    $container.hide();
+    return;
+  }
+  history.forEach(function (item) {
+    var $btn = $('<button>')
+      .attr('type', 'button')
+      .addClass('btn btn-link btn-sm p-0 d-block text-start w-100 text-truncate text-secondary')
+      .attr('title', item.address)
+      .text(item.address)
+      .css({ fontSize: '0.8rem' })
+      .click(function () {
+        var latLng = new google.maps.LatLng(item.lat, item.lng);
+        $('#txt-address').val(item.address);
+        txt_point.val(latLng.toUrlValue());
+        infowindow.setContent('Your location: <br/><strong class="fw-bold">' + escape_html(item.address) + '</strong>');
+        marker.setOptions({ position: latLng, visible: true });
+        map.setOptions({ center: latLng, zoom: 12 });
+        if (is_circle())
+          circle.setOptions({ center: latLng, visible: true });
+        else if (rectangle.getVisible())
+          move_rectange(latLng);
+      });
+    $list.append($btn);
+  });
+  $container.show();
+}
+
+function clear_search_history() {
+  try { localStorage.removeItem(history_storage_key); } catch (e) { /* noop */ }
+  render_search_history();
 }
 
 function initialize() {
@@ -301,6 +364,7 @@ function initialize() {
     infowindow.setOptions({ content: `Your location: <br/><strong class="fw-bold">${escape_html(place.name)}</strong><p>${escape_html(place.formatted_address || '')}</p>`, map });
     marker.setOptions({ position: place.geometry.location, visible: true });
 
+    save_to_history(place.formatted_address || place.name, place.geometry.location);
     clear_markers();
     set_accessibility(true);
 
@@ -381,17 +445,15 @@ function init_other() {
     var t = $(this);
     var is_hide = t.hasClass('is_hide');
     if (is_hide) {
-      nav.stop().animate({ top: 10 });
-      t.stop().animate({ top: 0 }, function () {
-        t.removeClass('is_hide').find('i').removeClass('bi-arrow-down-circle-fill').addClass('bi-arrow-up-circle-fill');
-      });
+      nav.css('top', 10);
+      t.css('top', 0);
+      t.removeClass('is_hide').find('i').removeClass('bi-arrow-down-circle-fill').addClass('bi-arrow-up-circle-fill');
+      t.attr('aria-expanded', 'true');
     } else {
-      nav.stop().animate({ top: (0 - height) }, function () {
-        t.find('i').removeClass('bi-arrow-up-circle-fill').addClass('bi-arrow-down-circle-fill');
-        t.stop().animate({ top: 63 }, function () {
-          t.addClass('is_hide');
-        });
-      });
+      nav.css('top', 0 - height);
+      t.css('top', 63);
+      t.find('i').removeClass('bi-arrow-up-circle-fill').addClass('bi-arrow-down-circle-fill');
+      t.addClass('is_hide').attr('aria-expanded', 'false');
     }
   });
 
@@ -414,6 +476,13 @@ function init_other() {
   });
 
   txt_point = $('#txt-point');
+
+  $('#btn-clear-history').click(function (e) {
+    e.preventDefault();
+    clear_search_history();
+  });
+
+  render_search_history();
 
   show_help('<h3>We glad you here!</h3>');
 

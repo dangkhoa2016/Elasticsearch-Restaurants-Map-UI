@@ -63,6 +63,8 @@ window.ElasticsearchRestaurants = function() {
   this.search_result_message = '';
   this.max_search_results = config.maxSearchResults;
   this.autocomplete_country_restriction = config.autocompleteCountryRestriction || '';
+  this.history_storage_key = 'er_search_history';
+  this.max_history_items = 8;
 
   // Cached jQuery DOM references (populated in init_other)
   this.$sel_enlarge_type = null;
@@ -191,6 +193,68 @@ window.ElasticsearchRestaurants = function() {
   };
 
 
+  this.load_search_history = function () {
+    try {
+      var raw = localStorage.getItem(this.history_storage_key);
+      var parsed = JSON.parse(raw || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  };
+
+  this.save_to_history = function (address, latLng) {
+    if (!address || !latLng) return;
+    var history = this.load_search_history();
+    history = history.filter(function (h) { return h.address !== address; });
+    history.unshift({ address: address, lat: latLng.lat(), lng: latLng.lng() });
+    history = history.slice(0, this.max_history_items);
+    try {
+      localStorage.setItem(this.history_storage_key, JSON.stringify(history));
+    } catch (e) { /* storage full or unavailable */ }
+    this.render_search_history();
+  };
+
+  this.render_search_history = function () {
+    var t = this;
+    var history = t.load_search_history();
+    var $container = $('#search-history');
+    var $list = $('#history-list');
+    if (!$container.length) return;
+    $list.empty();
+    if (history.length === 0) {
+      $container.hide();
+      return;
+    }
+    history.forEach(function (item) {
+      var $btn = $('<button>')
+        .attr('type', 'button')
+        .addClass('btn btn-link btn-sm p-0 d-block text-start w-100 text-truncate text-secondary')
+        .attr('title', item.address)
+        .text(item.address)
+        .css({ fontSize: '0.8rem' })
+        .click(function () {
+          var latLng = new google.maps.LatLng(item.lat, item.lng);
+          $('#txt-address').val(item.address);
+          t.txt_point.val(latLng.toUrlValue());
+          t.infowindow.setContent('Your location: <br/><strong class="fw-bold">' + t.escape_html(item.address) + '</strong>');
+          t.marker.setOptions({ position: latLng, visible: true });
+          t.map.setOptions({ center: latLng, zoom: 12 });
+          if (t.is_circle())
+            t.circle.setOptions({ center: latLng, visible: true });
+          else if (t.rectangle.getVisible())
+            t.move_rectange(latLng);
+        });
+      $list.append($btn);
+    });
+    $container.show();
+  };
+
+  this.clear_search_history = function () {
+    try { localStorage.removeItem(this.history_storage_key); } catch (e) { /* noop */ }
+    this.render_search_history();
+  };
+
   this.initialize = function () {
     var t = this;
 
@@ -315,6 +379,7 @@ window.ElasticsearchRestaurants = function() {
       t.infowindow.setOptions({ content: `Your location: <br/><strong class="fw-bold">${t.escape_html(place.name)}</strong><p>${t.escape_html(place.formatted_address || '')}</p>`, map: t.map });
       t.marker.setOptions({ position: place.geometry.location, visible: true });
 
+      t.save_to_history(place.formatted_address || place.name, place.geometry.location);
       t.clear_markers();
       t.set_accessibility(true);
 
@@ -399,17 +464,15 @@ window.ElasticsearchRestaurants = function() {
       var el = $(this);
       var is_hide = el.hasClass('is_hide');
       if (is_hide) {
-        nav.stop().animate({ top: 10 });
-        el.stop().animate({ top: 0 }, function () {
-          el.removeClass('is_hide').find('i').removeClass('bi-arrow-down-circle-fill').addClass('bi-arrow-up-circle-fill');
-        });
+        nav.css('top', 10);
+        el.css('top', 0);
+        el.removeClass('is_hide').find('i').removeClass('bi-arrow-down-circle-fill').addClass('bi-arrow-up-circle-fill');
+        el.attr('aria-expanded', 'true');
       } else {
-        nav.stop().animate({ top: (0 - height) }, function () {
-          el.find('i').removeClass('bi-arrow-up-circle-fill').addClass('bi-arrow-down-circle-fill');
-          el.stop().animate({ top: 63 }, function () {
-            el.addClass('is_hide');
-          });
-        });
+        nav.css('top', 0 - height);
+        el.css('top', 63);
+        el.find('i').removeClass('bi-arrow-up-circle-fill').addClass('bi-arrow-down-circle-fill');
+        el.addClass('is_hide').attr('aria-expanded', 'false');
       }
     });
 
@@ -432,6 +495,13 @@ window.ElasticsearchRestaurants = function() {
     });
 
     t.txt_point = $('#txt-point');
+
+    $('#btn-clear-history').click(function (e) {
+      e.preventDefault();
+      t.clear_search_history();
+    });
+
+    t.render_search_history();
 
     $('#btn-reset').click(function (e) {
       e.preventDefault();

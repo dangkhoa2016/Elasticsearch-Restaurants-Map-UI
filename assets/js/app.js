@@ -12,10 +12,14 @@ Campbelltown, NSW, Australia (-34.064999, 150.814163)
 */
 
 window.ElasticsearchRestaurants = function() {
-  this.endpoint = 'https://elasticsearch-restaurants-api-nodejs.khoa2016.repl.co';
-  this.index_name = 'restaurants';
+  var defaultConfig = window.ELASTICSEARCH_RESTAURANTS_DEFAULT_CONFIG || {};
+  var config = typeof window.createElasticsearchRestaurantsConfig === 'function'
+    ? window.createElasticsearchRestaurantsConfig(window.ELASTICSEARCH_RESTAURANTS_CONFIG)
+    : defaultConfig;
+  this.endpoint = config.endpoint;
+  this.index_name = config.indexName;
   this.map = null;
-  this.map_center = [-37.840935, 144.946457];
+  this.map_center = config.mapCenter;
   this.center = new google.maps.LatLng(this.map_center[0], this.map_center[1]);
   this.default_type = 'm';
   this.default_enlarge = 'circle';
@@ -24,10 +28,9 @@ window.ElasticsearchRestaurants = function() {
   this.default_distance_vertical = 150;
   this.marker = null;
   this.circle = null;
-  this.arr_icons = [
-    'https://cdn-icons-png.flaticon.com/512/325/325573.png', 'https://cdn-icons-png.flaticon.com/512/2533/2533600.png', 'https://cdn-icons-png.flaticon.com/512/2934/2934069.png',
-    'https://cdn-icons-png.flaticon.com/512/846/846398.png'
-  ];
+  this.arr_icons = config.restaurantIcons;
+  this.marker_icon = config.markerIcon;
+  this.fallback_restaurant_photo = config.fallbackRestaurantPhoto;
   this.rectangle = null;
   this.infowindow = null;
   this.infowindow_restaurant = null;
@@ -58,9 +61,126 @@ window.ElasticsearchRestaurants = function() {
   this.arr_markers = [];
   this.arr_restaurants = [];
   this.search_result_message = '';
-  this.max_search_results = 80;
+  this.max_search_results = config.maxSearchResults;
 
   this.grp = ['#grp-distance', '#grp-horizontal', '#grp-vertical'];
+
+  this.escape_html = function (value) {
+    return String(value == null ? '' : value).replace(/[&<>'"]/g, function (char) {
+      return {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[char];
+    });
+  };
+
+  this.sanitize_url = function (value, fallback = '') {
+    if (typeof value !== 'string' || value.trim() === '')
+      return fallback;
+
+    try {
+      var url = new URL(value, window.location.origin);
+      if (url.protocol === 'http:' || url.protocol === 'https:')
+        return url.toString();
+    } catch (error) {
+      return fallback;
+    }
+
+    return fallback;
+  };
+
+  this.to_number = function (value, fallback = 0) {
+    var parsed = typeof value === 'number' ? value : parseFloat(value);
+    return isFinite(parsed) ? parsed : fallback;
+  };
+
+  this.is_positive_number = function (value) {
+    return this.to_number(value, 0) > 0;
+  };
+
+  this.get_search_type = function () {
+    return $('#sel-enlarge-type').val() === 'rectangle' ? 'rectangle' : 'circle';
+  };
+
+  this.join_url = function (base, path) {
+    if (typeof base !== 'string' || base.trim() === '')
+      return '';
+
+    return `${base.replace(/\/+$/, '')}/${String(path || '').replace(/^\/+/, '')}`;
+  };
+
+  this.validate_search_request = function () {
+    var position = this.marker && this.marker.getPosition ? this.marker.getPosition() : null;
+    if (!this.endpoint)
+      return 'Search endpoint is not configured.';
+    if (!position || !this.is_latitude(position.lat()) || !this.is_longitude(position.lng()))
+      return 'Please select or enter a valid location.';
+
+    if (this.is_circle()) {
+      if (!this.is_positive_number(this.circle && this.circle.getRadius ? this.circle.getRadius() : 0))
+        return 'Please enter a valid search distance.';
+    } else {
+      var bounds = this.rectangle && this.rectangle.getBounds ? this.rectangle.getBounds() : null;
+      if (!bounds)
+        return 'Please enter a valid rectangular search area.';
+    }
+
+    return '';
+  };
+
+  this.normalize_search_response = function (res) {
+    var hits = res && res.hits && Array.isArray(res.hits.hits) ? res.hits.hits : [];
+    var totalValue = res && res.hits && res.hits.total ? res.hits.total.value : 0;
+    var shards = res && res._shards ? res._shards : {};
+
+    return {
+      took: this.to_number(res && res.took, 0),
+      total: this.to_number(totalValue, hits.length),
+      hits,
+      shardsTotal: this.to_number(shards.total, 0),
+      shardsSuccessful: this.to_number(shards.successful, 0)
+    };
+  };
+
+  this.format_search_result_message = function (summary, displayedCount) {
+    var limitMessage = summary.total > displayedCount
+      ? `<p><strong>Displaying ${displayedCount} of ${summary.total} results.</strong></p>`
+      : '';
+
+    return `<div>Took: ${summary.took} Milliseconds<br/>Total: ${summary.total}<br/>Shards:<br/><ul><li>Total: ${summary.shardsTotal}</li><li>Successful: ${summary.shardsSuccessful}</li></ul>${limitMessage}</div>`;
+  };
+
+  this.get_restaurant_marker_data = function (restaurant) {
+    var source = restaurant && restaurant._source ? restaurant._source : {};
+    var location = source.location || {};
+    var lat = this.to_number(location.lat, NaN);
+    var lng = this.to_number(location.lon, NaN);
+
+    if (!this.is_latitude(lat) || !this.is_longitude(lng))
+      return null;
+
+    return {
+      lat,
+      lng,
+      title: this.escape_html(source.name || 'Restaurant'),
+      description: this.escape_html(source.description || 'No description available.'),
+      photo: this.sanitize_url(this.get_photo(source.photos), this.fallback_restaurant_photo)
+    };
+  };
+
+  this.build_restaurant_info_content = function (restaurant) {
+    var locationText = this.escape_html(`${restaurant.lat}, ${restaurant.lng}`);
+    return `<div class="iw-main">
+      <h4 title="Location: ${locationText}">${restaurant.title}</h4>
+      <div class="iw-body">
+      <img src="${this.escape_html(restaurant.photo)}" class="float-start me-3 iw-img" alt="${restaurant.title}">
+      <div>${restaurant.description}</div>
+      </div>
+    </div>`;
+  };
 
 
   this.initialize = function () {
@@ -102,8 +222,7 @@ window.ElasticsearchRestaurants = function() {
       position: t.center,
       map: t.map,
       icon: {
-        // url: '/imgs/marker-x64.png',
-        url: 'https://cdn-icons-png.flaticon.com/512/1946/1946401.png',
+        url: t.marker_icon,
         scaledSize: { width: 40, height: 40 }
       },
       draggable: true,
@@ -185,7 +304,7 @@ window.ElasticsearchRestaurants = function() {
 
       t.txt_point.val(place.geometry.location.toUrlValue());
 
-      t.infowindow.setOptions({ content: `Your location: <br/><strong class="fw-bold">${place.name}</strong><p>${place.formatted_address}</p>`, map: t.map });
+      t.infowindow.setOptions({ content: `Your location: <br/><strong class="fw-bold">${t.escape_html(place.name)}</strong><p>${t.escape_html(place.formatted_address || '')}</p>`, map: t.map });
       t.marker.setOptions({ position: place.geometry.location, visible: true });
 
       t.clear_markers();
@@ -332,47 +451,64 @@ window.ElasticsearchRestaurants = function() {
       t.set_point(t.txt_point);
     }, 250));
 
-    $('#md-notice').on('hidden.bs.modal', function (e) {
-      t.create_restaurant_markers();
-    });
-
     $('#btn-search').click(function (e) {
       e.preventDefault();
-      if (!t.marker.getVisible()) {
-        t.show_message(null, 'Please select or enter your location.');
+      var validationError = t.validate_search_request();
+      if (validationError) {
+        t.show_message(null, validationError);
         return;
       }
 
       var data = t.get_query_params();
-      if (this.test_longtime)
+      if (t.test_longtime)
         data.sleep = true;
 
+      if (t.xhr_query && t.xhr_query.readyState !== 4)
+        t.xhr_query.abort();
+
       t.xhr_query = $.ajax({
-        url: `${t.endpoint}/search`,
+        url: t.join_url(t.endpoint, 'search'),
         type: 'post',
         data,
+        timeout: 15000,
         beforeSend: function () {
           t.search_result_message = '';
+          t.clear_markers();
+          t.set_accessibility(true);
           t.toggle_loading(true);
         },
-        error: function () {
+        error: function (xhr, textStatus) {
+          if (textStatus === 'abort')
+            return;
+
           t.clear_markers();
           t.set_accessibility(true);
           t.toggle_loading(false);
           t.arr_restaurants = [];
+          t.search_result_message = 'Search request failed.';
+          t.show_message('Search failed', 'Unable to fetch restaurants right now. Please try again.');
         },
         success: function (res) {
+          var summary = t.normalize_search_response(res);
+          var displayedCount = Math.min(summary.hits.length, t.max_search_results);
+
           t.toggle_loading(false);
-          t.search_result_message = `<div>Took: ${res.took} Milliseconds<br/>Total: ${res.hits.total.value}<br/>Shards:<br/><ul><li>Total: ${res._shards.total}</li><li>Successful: ${res._shards.successful}</li></ul>`;
-          if (res.hits.total.value > t.max_search_results) {
-            t.show_message(`Search result limit exceeded: ${t.max_search_results}`, t.search_result_message + `<b>We can't display all markers, please specify smaller range.</b>`);
+          t.arr_restaurants = summary.hits.slice(0, t.max_search_results);
+          t.search_result_message = t.format_search_result_message(summary, displayedCount);
+          t.clear_markers();
+
+          if (summary.total > 0) {
+            t.create_restaurant_markers();
+            t.set_accessibility(false);
           } else {
-            t.arr_restaurants = res.hits.hits || [];
-            t.clear_markers();
+            t.set_accessibility(true);
+          }
 
-            if (res.hits.total.value > 0)
-              t.set_accessibility(false);
-
+          if (summary.total > t.max_search_results) {
+            t.show_message(`Search result limit exceeded: ${t.max_search_results}`, t.search_result_message + '<b>Please specify a smaller range to narrow the results.</b>');
+          } else if (summary.total === 0) {
+            t.show_message('Search result', t.search_result_message + '<p>No restaurants matched the current search area.</p>');
+          } else {
             t.show_message('Search result', t.search_result_message);
           }
         },
@@ -406,40 +542,38 @@ window.ElasticsearchRestaurants = function() {
     if (!Array.isArray(t.arr_restaurants) || t.arr_restaurants.length === 0)
       return;
 
-    t.arr_markers = t.arr_restaurants.map((restaurant) => {
-      var { location: { lat, lon: lng }, name: title, description, photos } = restaurant._source;
+    t.arr_markers = t.arr_restaurants.reduce((markers, restaurant) => {
+      var markerData = t.get_restaurant_marker_data(restaurant);
+      if (!markerData)
+        return markers;
 
       var r_marker = new google.maps.Marker({
-        map: t.map, position: { lat, lng },
-        title,
-        description,
-        photos,
+        map: t.map, position: { lat: markerData.lat, lng: markerData.lng },
+        title: markerData.title,
         animation: google.maps.Animation.DROP,
         icon: {
           url: t.arr_icons[Math.floor(Math.random() * t.arr_icons.length)],
-          // url: '/imgs/restaurant-x64.png',
           scaledSize: { width: 35, height: 35 }
         }
       });
 
       r_marker.addListener("click", () => {
-        t.infowindow_restaurant.setContent(t.content_template.replace('{title}', title).replace('{description}', description)
-          .replace('{photo}', t.get_photo(photos))
-          .replace('{latitude}', lat).replace('{longitude}', lng));
+        t.infowindow_restaurant.setContent(t.build_restaurant_info_content(markerData));
 
         t.infowindow_restaurant.open({
           anchor: r_marker, map: t.map
         });
       });
 
-      return r_marker;
-    });
+      markers.push(r_marker);
+      return markers;
+    }, []);
 
     t.arr_restaurants = [];
   };
 
   this.get_photo = function (photos) {
-    return photos && photos.legacy && photos.legacy.url ? photos.legacy.url : 'https://cdn-icons-png.flaticon.com/512/2533/2533563.png';
+    return photos && photos.legacy && photos.legacy.url ? photos.legacy.url : this.fallback_restaurant_photo;
   };
 
   this.set_accessibility = function (enabled) {
@@ -455,6 +589,7 @@ window.ElasticsearchRestaurants = function() {
     t.infowindow_restaurant.close();
     if (Array.isArray(t.arr_markers) && t.arr_markers.length > 0) {
       t.arr_markers.map((mk) => {
+        google.maps.event.clearInstanceListeners(mk);
         mk.setMap(null);
       });
       t.arr_markers = [];
@@ -466,7 +601,7 @@ window.ElasticsearchRestaurants = function() {
     if (t.is_circle())
       return {
         "index": t.index_name,
-        "type": $('#sel-enlarge-type').val(),
+        "type": t.get_search_type(),
         "distance": `${t.circle.getRadius()}m`,
         "location": t.marker.getPosition().toJSON()
       };
@@ -474,7 +609,7 @@ window.ElasticsearchRestaurants = function() {
       var { nw, se } = t.get_4_corners();
       return {
         "index": t.index_name,
-        "type": $('#sel-enlarge-type').val(),
+        "type": t.get_search_type(),
         "top_left": nw,
         "bottom_right": se
       };
@@ -515,7 +650,7 @@ window.ElasticsearchRestaurants = function() {
   };
 
   this.is_circle = function () {
-    return $('#sel-enlarge-type').val() === 'circle';
+    return this.get_search_type() === 'circle';
   };
 
   this.handle_change_measure = function (el, redraw = true) {

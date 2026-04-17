@@ -4,7 +4,7 @@
     return new Promise((resolve) => {
       fetch(file)
         .then(res => {
-          if (res.status !== 200)
+          if (!res.ok)
             throw new Error(`File [${file}] does not exists.`);
           return res.text();
         }).then(html => { resolve(html); })
@@ -15,20 +15,71 @@
     });
   };
 
-  const loadJs = function (file) {
-    return new Promise((resolve) => {
-      fetch(file, { mode: 'no-cors' })
-        .then(res => {
-          if (res.status !== 200)
-            throw new Error(`File [${file}] does not exists.`);
-          return res.text();
-        }).then(js => {
-          eval(js);
-          resolve();
-        }).catch(ex => {
-          console.log(`Error load js: ${file}`, ex);
-          resolve();
-        });
+  const loadScript = function (src, attributes = {}) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      Object.keys(attributes).forEach((key) => {
+        script.setAttribute(key, attributes[key]);
+      });
+      script.onload = resolve;
+      script.onerror = () => reject(new Error(`Unable to load script: ${src}`));
+      document.body.appendChild(script);
+    });
+  };
+
+  const getRuntimeConfig = function () {
+    if (typeof window.createElasticsearchRestaurantsConfig !== 'function')
+      throw new Error('Missing config helper. Load assets/js/config.js before runtime-config.js and loader.js.');
+
+    return window.createElasticsearchRestaurantsConfig(window.ELASTICSEARCH_RESTAURANTS_CONFIG);
+  };
+
+  const showBootstrapError = function (message) {
+    const container = document.createElement('div');
+    const text = message || 'Application configuration is incomplete.';
+    container.className = 'alert alert-danger m-3';
+    container.setAttribute('role', 'alert');
+    container.textContent = text;
+
+    const root = document.getElementById('container');
+    if (root && root.parentNode) {
+      root.parentNode.insertBefore(container, root);
+    } else {
+      document.body.prepend(container);
+    }
+  };
+
+  const loadGoogleMaps = function (config) {
+    if (window.google && window.google.maps)
+      return Promise.resolve();
+
+    if (!config.googleMapsApiKey)
+      return Promise.reject(new Error('Missing Google Maps API key. Define it in assets/js/runtime-config.js before loading the app.'));
+
+    return new Promise((resolve, reject) => {
+      const callbackName = '__erGoogleMapsReady';
+      const libraries = encodeURIComponent(config.googleMapsLibraries.join(','));
+      const cleanup = function () {
+        try {
+          delete window[callbackName];
+        } catch (error) {
+          window[callbackName] = undefined;
+        }
+      };
+
+      window[callbackName] = function () {
+        cleanup();
+        resolve();
+      };
+
+      loadScript(`https://maps.googleapis.com/maps/api/js?loading=async&libraries=${libraries}&key=${encodeURIComponent(config.googleMapsApiKey)}&callback=${callbackName}`, {
+        async: 'true',
+        defer: 'true'
+      }).catch((error) => {
+        cleanup();
+        reject(error);
+      });
     });
   };
 
@@ -48,19 +99,12 @@
     }));
   };
 
-  function main_debug() {
-    return new Promise(resolve => {
-      var script = document.createElement('script');
-      script.onload = function() { initialize(); resolve(); };
-      script.src = '/assets/js/app_debug.js';
-      document.body.appendChild(script);
-    });
-  }
-
   async function main() {
-    await loadJs('/assets/js/app.js');
+    const config = getRuntimeConfig();
+    window.ELASTICSEARCH_RESTAURANTS_CONFIG = config;
 
-    const er = new ElasticsearchRestaurants();
+    await loadScript('/assets/js/app.js');
+    await loadGoogleMaps(config);
 
     window.map_styles = [
       {
@@ -223,18 +267,20 @@
       }
     ];
 
+    const er = new ElasticsearchRestaurants();
     er.initialize();
-
-    delete window.map_styles;
-    delete window.ElasticsearchRestaurants;
   };
 
   await loadAndRenderParts();
 
-  // run the app
-  // await main_debug();
-  await main();
+  try {
+    await main();
+  } catch (error) {
+    console.error('Application bootstrap error', error);
+    showBootstrapError(error.message);
+  } finally {
+    delete window.map_styles;
+    delete window.ElasticsearchRestaurants;
+  }
 
 })();
-
-function initialize() {  };

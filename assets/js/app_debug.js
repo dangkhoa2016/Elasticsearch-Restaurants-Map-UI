@@ -10,10 +10,14 @@ Dubbo, NSW, Australia (-32.256943, 148.601105)
 Cessnock NSW, Australia (-32.834167, 151.355499)
 Campbelltown, NSW, Australia (-34.064999, 150.814163)
 */
-const endpoint = 'https://elasticsearch-restaurants-api-nodejs.khoa2016.repl.co';
+const defaultConfig = window.ELASTICSEARCH_RESTAURANTS_DEFAULT_CONFIG || {};
+const runtimeConfig = typeof window.createElasticsearchRestaurantsConfig === 'function'
+  ? window.createElasticsearchRestaurantsConfig(window.ELASTICSEARCH_RESTAURANTS_CONFIG)
+  : defaultConfig;
+const endpoint = runtimeConfig.endpoint;
 var map = null;
-var index_name = 'restaurants';
-var map_center = [-37.840935, 144.946457];
+var index_name = runtimeConfig.indexName;
+var map_center = runtimeConfig.mapCenter;
 var center = null;
 var default_type = 'm';
 var default_enlarge = 'circle';
@@ -22,10 +26,9 @@ var default_distance_horizontal = 150;
 var default_distance_vertical = 150;
 var marker = null;
 var circle = null;
-var arr_icons = [
-  'https://cdn-icons-png.flaticon.com/512/325/325573.png', 'https://cdn-icons-png.flaticon.com/512/2533/2533600.png', 'https://cdn-icons-png.flaticon.com/512/2934/2934069.png',
-  'https://cdn-icons-png.flaticon.com/512/846/846398.png'
-];
+var arr_icons = runtimeConfig.restaurantIcons;
+var marker_icon = runtimeConfig.markerIcon;
+var fallback_restaurant_photo = runtimeConfig.fallbackRestaurantPhoto;
 var rectangle = null;
 var infowindow = null;
 var infowindow_restaurant = null;
@@ -106,8 +109,7 @@ function initialize() {
     position: center,
     map: map,
     icon: {
-      // url: '/imgs/marker-x64.png',
-      url: 'https://cdn-icons-png.flaticon.com/512/1946/1946401.png',
+      url: marker_icon,
       scaledSize: { width: 40, height: 40 }
     },
     draggable: true,
@@ -438,7 +440,7 @@ function create_restaurant_markers() {
 };
 
 function get_photo(photos) {
-  return photos && photos.legacy && photos.legacy.url ? photos.legacy.url : 'https://cdn-icons-png.flaticon.com/512/2533/2533563.png';
+  return photos && photos.legacy && photos.legacy.url ? photos.legacy.url : fallback_restaurant_photo;
 };
 
 function set_accessibility(enabled) {

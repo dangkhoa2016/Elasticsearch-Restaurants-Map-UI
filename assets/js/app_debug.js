@@ -38,11 +38,11 @@ var circle_distance = null;
 var autocomplete = null;
 var xhr_query = null;
 var max_distance_circle_in_miles = 4;
-var nax_distance_horizontal_in_miles = 4;
-var nax_distance_vertical_in_miles = 4;
+var max_distance_horizontal_in_miles = 4;
+var max_distance_vertical_in_miles = 4;
 var max_distance_circle_in_km = 10;
-var nax_distance_horizontal_in_km = 10;
-var nax_distance_vertical_in_km = 10;
+var max_distance_horizontal_in_km = 10;
+var max_distance_vertical_in_km = 10;
 var test_longtime = false;
 var content_template = `<div class="iw-main">
   <h4 title="Location: {latitude}, {longitude}">{title}</h4>
@@ -60,9 +60,116 @@ var help_text = `
 var arr_markers = [];
 var arr_restaurants = [];
 var search_result_message = '';
-var max_search_results = 80;
+var max_search_results = runtimeConfig.maxSearchResults || 80;
+var autocomplete_country_restriction = runtimeConfig.autocompleteCountryRestriction || '';
+
+// Cached jQuery DOM references (populated in init_other)
+var $sel_enlarge_type = null;
+var $txt_distance = null;
+var $txt_horizontal = null;
+var $txt_vertical = null;
 
 var grp = ['#grp-distance', '#grp-horizontal', '#grp-vertical'];
+
+function escape_html(value) {
+  return String(value == null ? '' : value).replace(/[&<>'"]/g, function (char) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+  });
+}
+
+function sanitize_url(value, fallback) {
+  if (fallback === undefined) fallback = '';
+  if (typeof value !== 'string' || value.trim() === '') return fallback;
+  try {
+    var url = new URL(value, window.location.origin);
+    if (url.protocol === 'http:' || url.protocol === 'https:') return url.toString();
+  } catch (e) { /* noop */ }
+  return fallback;
+}
+
+function to_number(value, fallback) {
+  if (fallback === undefined) fallback = 0;
+  var parsed = typeof value === 'number' ? value : parseFloat(value);
+  return isFinite(parsed) ? parsed : fallback;
+}
+
+function is_positive_number(value) {
+  return to_number(value, 0) > 0;
+}
+
+function join_url(base, path) {
+  if (typeof base !== 'string' || base.trim() === '') return '';
+  return base.replace(/\/+$/, '') + '/' + String(path || '').replace(/^\/+/, '');
+}
+
+function show_text_message(title, text) {
+  var $modal = $('#md-notice');
+  $modal.find('.modal-title').text(title || 'Notice');
+  $modal.find('.modal-body').empty().append($('<p>').text(text || ''));
+  $modal.modal('show');
+}
+
+function validate_search_request() {
+  var position = marker && marker.getPosition ? marker.getPosition() : null;
+  if (!endpoint) return 'Search endpoint is not configured.';
+  if (!position || !is_latitude(position.lat()) || !is_longitude(position.lng()))
+    return 'Please select or enter a valid location.';
+  if (is_circle()) {
+    if (!is_positive_number(circle && circle.getRadius ? circle.getRadius() : 0))
+      return 'Please enter a valid search distance.';
+  } else {
+    if (!rectangle || !rectangle.getBounds || !rectangle.getBounds())
+      return 'Please enter a valid rectangular search area.';
+  }
+  return '';
+}
+
+function normalize_search_response(res) {
+  var hits = res && res.hits && Array.isArray(res.hits.hits) ? res.hits.hits : [];
+  var totalValue = res && res.hits && res.hits.total ? res.hits.total.value : 0;
+  var shards = res && res._shards ? res._shards : {};
+  return {
+    took: to_number(res && res.took, 0),
+    total: to_number(totalValue, hits.length),
+    hits,
+    shardsTotal: to_number(shards.total, 0),
+    shardsSuccessful: to_number(shards.successful, 0)
+  };
+}
+
+function format_search_result_message(summary, displayedCount) {
+  var limitMessage = summary.total > displayedCount
+    ? '<p><strong>Displaying ' + displayedCount + ' of ' + summary.total + ' results.</strong></p>'
+    : '';
+  return '<div>Took: ' + summary.took + ' Milliseconds<br/>Total: ' + summary.total +
+    '<br/>Shards:<br/><ul><li>Total: ' + summary.shardsTotal + '</li><li>Successful: ' +
+    summary.shardsSuccessful + '</li></ul>' + limitMessage + '</div>';
+}
+
+function get_restaurant_marker_data(restaurant) {
+  var source = restaurant && restaurant._source ? restaurant._source : {};
+  var location = source.location || {};
+  var lat = to_number(location.lat, NaN);
+  var lng = to_number(location.lon, NaN);
+  if (!is_latitude(lat) || !is_longitude(lng)) return null;
+  return {
+    lat,
+    lng,
+    title: escape_html(source.name || 'Restaurant'),
+    description: escape_html(source.description || 'No description available.'),
+    photo: sanitize_url(get_photo(source.photos), fallback_restaurant_photo)
+  };
+}
+
+function build_restaurant_info_content(markerData) {
+  var locationText = escape_html(markerData.lat + ', ' + markerData.lng);
+  return '<div class="iw-main">' +
+    '<h4 title="Location: ' + locationText + '">' + markerData.title + '</h4>' +
+    '<div class="iw-body">' +
+    '<img src="' + escape_html(markerData.photo) + '" class="float-start me-3 iw-img" alt="' + markerData.title + '">' +
+    '<div>' + markerData.description + '</div>' +
+    '</div></div>';
+}
 
 function initialize() {
   center = new google.maps.LatLng(map_center[0], map_center[1]);
@@ -119,7 +226,7 @@ function initialize() {
   map.addListener("click", (event) => {
     var latLng = event.latLng;
     txt_point.val(latLng.toUrlValue());
-    infowindow.setContent(`Your location: <br/><strong class="fw-bold">${latLng.toUrlValue()}</strong>`);
+    infowindow.setContent(`Your location: <br/><strong class="fw-bold">${escape_html(latLng.toUrlValue())}</strong>`);
     marker.setOptions({ position: latLng, visible: true });
     if (is_circle())
       circle.setOptions({ center: latLng, visible: true });
@@ -139,7 +246,7 @@ function initialize() {
   marker.addListener('drag', function (event) {
     var latLng = event.latLng;
     txt_point.val(latLng.toUrlValue());
-    infowindow.setContent(`Your location: <br/><strong class="fw-bold">${latLng.toUrlValue()}</strong>`);
+    infowindow.setContent(`Your location: <br/><strong class="fw-bold">${escape_html(latLng.toUrlValue())}</strong>`);
     if (circle.getVisible())
       circle.setCenter(latLng);
     else if (rectangle.getVisible())
@@ -165,9 +272,9 @@ function initialize() {
     set_distance_rectange();
   });
 
-  var search_options = {
-    componentRestrictions: { country: "au" }
-  };
+  var search_options = autocomplete_country_restriction
+    ? { componentRestrictions: { country: autocomplete_country_restriction } }
+    : {};
   autocomplete = new google.maps.places.Autocomplete(document.getElementById('txt-address'), search_options);
 
   autocomplete.addListener("place_changed", () => {
@@ -191,7 +298,7 @@ function initialize() {
 
     txt_point.val(place.geometry.location.toUrlValue());
 
-    infowindow.setOptions({ content: `Your location: <br/><strong class="fw-bold">${place.name}</strong><p>${place.formatted_address}</p>`, map });
+    infowindow.setOptions({ content: `Your location: <br/><strong class="fw-bold">${escape_html(place.name)}</strong><p>${escape_html(place.formatted_address || '')}</p>`, map });
     marker.setOptions({ position: place.geometry.location, visible: true });
 
     clear_markers();
@@ -235,7 +342,7 @@ function set_point(txt) {
   var latLng = new google.maps.LatLng({ lat: point[0], lng: point[1] });
   marker.setOptions({ position: latLng, visible: true });
 
-  infowindow.setContent(`Your location: <br/><strong class="fw-bold">${latLng.toUrlValue()}</strong>`);
+  infowindow.setContent(`Your location: <br/><strong class="fw-bold">${escape_html(latLng.toUrlValue())}</strong>`);
   if (is_circle())
     circle.setOptions({ center: latLng, visible: true });
   else if (rectangle.getVisible())
@@ -264,6 +371,11 @@ function redraw_from_distance() {
 };
 
 function init_other() {
+  $sel_enlarge_type = $('#sel-enlarge-type');
+  $txt_distance = $('#txt-distance');
+  $txt_horizontal = $('#txt-horizontal');
+  $txt_vertical = $('#txt-vertical');
+
   var nav = $('#nav'), height = nav.outerHeight() + 10;
   $('#toggle-panel').click(function (e) {
     var t = $(this);
@@ -283,7 +395,7 @@ function init_other() {
     }
   });
 
-  $('#sel-enlarge-type').change(function (e) {
+  $sel_enlarge_type.change(function (e) {
     var cls = $(this).val();
     var lst = $('#advanced-panel .offcanvas-body .distance');
     lst.not('.' + cls).addClass('d-none');
@@ -347,8 +459,9 @@ function init_other() {
 
   $('#btn-search').click(function (e) {
     e.preventDefault();
-    if (!marker.getVisible()) {
-      show_message(null, 'Please select or enter your location.');
+    var validationError = validate_search_request();
+    if (validationError) {
+      show_text_message(null, validationError);
       return;
     }
 
@@ -356,32 +469,49 @@ function init_other() {
     if (test_longtime)
       data.sleep = true;
 
+    if (xhr_query && xhr_query.readyState !== 4)
+      xhr_query.abort();
+
     xhr_query = $.ajax({
-      url: `${endpoint}/search`,
+      url: join_url(endpoint, 'search'),
       type: 'post',
       data,
+      timeout: 15000,
       beforeSend: function () {
         search_result_message = '';
+        clear_markers();
+        set_accessibility(true);
         toggle_loading(true);
       },
-      error: function () {
+      error: function (xhr, textStatus) {
+        if (textStatus === 'abort') return;
         clear_markers();
         set_accessibility(true);
         toggle_loading(false);
         arr_restaurants = [];
+        search_result_message = 'Search request failed.';
+        show_text_message('Search failed', 'Unable to fetch restaurants right now. Please try again.');
       },
       success: function (res) {
+        var summary = normalize_search_response(res);
+        var displayedCount = Math.min(summary.hits.length, max_search_results);
+
         toggle_loading(false);
-        search_result_message = `<div>Took: ${res.took} Milliseconds<br/>Total: ${res.hits.total.value}<br/>Shards:<br/><ul><li>Total: ${res._shards.total}</li><li>Successful: ${res._shards.successful}</li></ul>`;
-        if (res.hits.total.value > max_search_results) {
-          show_message(`Search result limit exceeded: ${max_search_results}`, search_result_message + `<b>We can't display all markers, please specify smaller range.</b>`);
+        arr_restaurants = summary.hits.slice(0, max_search_results);
+        search_result_message = format_search_result_message(summary, displayedCount);
+        clear_markers();
+
+        if (summary.total > 0) {
+          set_accessibility(false);
         } else {
-          arr_restaurants = res.hits.hits || [];
-          clear_markers();
+          set_accessibility(true);
+        }
 
-          if (res.hits.total.value > 0)
-            set_accessibility(false);
-
+        if (summary.total > max_search_results) {
+          show_message('Search result limit exceeded: ' + max_search_results, search_result_message + '<b>Please specify a smaller range to narrow the results.</b>');
+        } else if (summary.total === 0) {
+          show_message('Search result', search_result_message + '<p>No restaurants matched the current search area.</p>');
+        } else {
           show_message('Search result', search_result_message);
         }
       },
@@ -407,34 +537,28 @@ function create_restaurant_markers() {
   if (!Array.isArray(arr_restaurants) || arr_restaurants.length === 0)
     return;
 
-  arr_markers = arr_restaurants.map((restaurant) => {
-    var { location: { lat, lon: lng }, name: title, description, photos } = restaurant._source;
+  arr_markers = arr_restaurants.reduce((markers, restaurant) => {
+    var markerData = get_restaurant_marker_data(restaurant);
+    if (!markerData) return markers;
 
     var r_marker = new google.maps.Marker({
-      map, position: { lat, lng },
-      title,
-      description,
-      photos,
+      map, position: { lat: markerData.lat, lng: markerData.lng },
+      title: markerData.title,
       animation: google.maps.Animation.DROP,
       icon: {
         url: arr_icons[Math.floor(Math.random() * arr_icons.length)],
-        // url: '/imgs/restaurant-x64.png',
         scaledSize: { width: 35, height: 35 }
       }
     });
 
     r_marker.addListener("click", () => {
-      infowindow_restaurant.setContent(content_template.replace('{title}', title).replace('{description}', description)
-        .replace('{photo}', get_photo(photos))
-        .replace('{latitude}', lat).replace('{longitude}', lng));
-
-      infowindow_restaurant.open({
-        anchor: r_marker, map
-      });
+      infowindow_restaurant.setContent(build_restaurant_info_content(markerData));
+      infowindow_restaurant.open({ anchor: r_marker, map });
     });
 
-    return r_marker;
-  });
+    markers.push(r_marker);
+    return markers;
+  }, []);
 
   arr_restaurants = [];
 };
@@ -454,6 +578,7 @@ function clear_markers() {
   infowindow_restaurant.close();
   if (Array.isArray(arr_markers) && arr_markers.length > 0) {
     arr_markers.map((mk) => {
+      google.maps.event.clearInstanceListeners(mk);
       mk.setMap(null);
     });
     arr_markers = [];
@@ -464,7 +589,7 @@ function get_query_params() {
   if (is_circle())
     return {
       "index": index_name,
-      "type": $('#sel-enlarge-type').val(),
+      "type": "circle",
       "distance": `${circle.getRadius()}m`,
       "location": marker.getPosition().toJSON()
     };
@@ -472,7 +597,7 @@ function get_query_params() {
     var { nw, se } = get_4_corners();
     return {
       "index": index_name,
-      "type": $('#sel-enlarge-type').val(),
+      "type": "rectangle",
       "top_left": nw,
       "bottom_right": se
     };
@@ -517,7 +642,7 @@ function bind_dropdown_text(el) {
 };
 
 function is_circle() {
-  return $('#sel-enlarge-type').val() === 'circle';
+  return ($sel_enlarge_type || $('#sel-enlarge-type')).val() === 'circle';
 };
 
 function handle_change_measure(el, redraw = true) {
@@ -530,22 +655,22 @@ function handle_change_measure(el, redraw = true) {
   if (value === 'miles') {
     if (is_circle()) {
       if (distance > max_distance_circle_in_miles)
-        $('#txt-distance').val(max_distance_circle_in_miles);
+        ($txt_distance || $('#txt-distance')).val(max_distance_circle_in_miles);
     } else {
-      if (distance[0] > nax_distance_horizontal_in_miles)
-        $('#txt-horizontal').val(nax_distance_horizontal_in_miles);
-      if (distance[1] > nax_distance_vertical_in_miles)
-        $('#txt-vertical').val(nax_distance_vertical_in_miles);
+      if (distance[0] > max_distance_horizontal_in_miles)
+        ($txt_horizontal || $('#txt-horizontal')).val(max_distance_horizontal_in_miles);
+      if (distance[1] > max_distance_vertical_in_miles)
+        ($txt_vertical || $('#txt-vertical')).val(max_distance_vertical_in_miles);
     }
   } else if (value === 'km') {
     if (is_circle()) {
       if (distance > max_distance_circle_in_km)
-        $('#txt-distance').val(max_distance_circle_in_km);
+        ($txt_distance || $('#txt-distance')).val(max_distance_circle_in_km);
     } else {
-      if (distance[0] > nax_distance_horizontal_in_km)
-        $('#txt-horizontal').val(nax_distance_horizontal_in_km);
-      if (distance[1] > nax_distance_vertical_in_km)
-        $('#txt-vertical').val(nax_distance_vertical_in_km);
+      if (distance[0] > max_distance_horizontal_in_km)
+        ($txt_horizontal || $('#txt-horizontal')).val(max_distance_horizontal_in_km);
+      if (distance[1] > max_distance_vertical_in_km)
+        ($txt_vertical || $('#txt-vertical')).val(max_distance_vertical_in_km);
     }
   }
 
@@ -564,10 +689,10 @@ function get_dropdown_measure(el) {
 };
 
 function set_default() {
-  $('#sel-enlarge-type').val(default_enlarge).trigger('change');
-  $('#txt-distance').val(default_distance_circle);
-  $('#txt-horizontal').val(default_distance_horizontal);
-  $('#txt-vertical').val(default_distance_vertical);
+  ($sel_enlarge_type || $('#sel-enlarge-type')).val(default_enlarge).trigger('change');
+  ($txt_distance || $('#txt-distance')).val(default_distance_circle);
+  ($txt_horizontal || $('#txt-horizontal')).val(default_distance_horizontal);
+  ($txt_vertical || $('#txt-vertical')).val(default_distance_vertical);
   ['#grp-distance .dropdown-menu li a[data-value="m"]', '#grp-horizontal .dropdown-menu li a[data-value="m"]', '#grp-vertical .dropdown-menu li a[data-value="m"]'].map((el) => handle_change_measure(el, false));
 
   redraw_from_distance();
@@ -581,15 +706,15 @@ function get_meters() {
 };
 
 function get_distance() {
-  return $('#txt-distance').val() || default_distance_circle;
+  return ($txt_distance || $('#txt-distance')).val() || default_distance_circle;
 };
 
 function get_horizontal() {
-  return $('#txt-horizontal').val() || default_distance_horizontal;
+  return ($txt_horizontal || $('#txt-horizontal')).val() || default_distance_horizontal;
 };
 
 function get_vertical() {
-  return $('#txt-vertical').val() || default_distance_vertical;
+  return ($txt_vertical || $('#txt-vertical')).val() || default_distance_vertical;
 };
 
 function get_point(txt) {

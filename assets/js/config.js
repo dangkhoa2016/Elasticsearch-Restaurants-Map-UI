@@ -12,6 +12,7 @@
     ],
     fallbackRestaurantPhoto: '/assets/imgs/restaurant-x64.png',
     maxSearchResults: 80,
+    autocompleteCountryRestriction: 'au',
   };
 
   const cloneArray = function (value) {

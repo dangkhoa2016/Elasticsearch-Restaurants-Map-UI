@@ -17,7 +17,8 @@ body {
     z-index: 1000;
     position: absolute;
     background: #fff;
-    top: 10px
+    top: 10px;
+    transition: top 0.3s ease;
 }
 #map {
   width: 100%;
@@ -25,8 +26,10 @@ body {
 }
 #toggle-panel {
   position: relative;
+  transition: top 0.3s ease;
 }
 #toggle-panel.is_hide {
+  /* panel is collapsed; toggle button peeks below nav */
 }
 body > svg {
     display: none;
@@ -38,8 +41,24 @@ body > svg {
     z-index: 100;
 }
 .iw-main { margin-left: 5px; }
-.iw-body { max-height: 200px; }
+.iw-body {
+  max-height: 200px;
+  overflow-y: auto;
+}
 .iw-img {
   max-width: 180px !important;
    border: 1px solid;
+}
+
+/* Accessibility: visible focus ring for keyboard navigation */
+:focus-visible {
+  outline: 2px solid #0d6efd;
+  outline-offset: 2px;
+}
+.btn:focus-visible,
+.form-control:focus-visible,
+.form-select:focus-visible {
+  outline: 2px solid #0d6efd;
+  outline-offset: 2px;
+  box-shadow: none;
 }

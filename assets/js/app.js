@@ -684,6 +684,69 @@ window.ElasticsearchRestaurants = function() {
     }, 2000);
   };
 
+  // ── My Location ──────────────────────────────────────────────────────────
+
+  this.use_my_location = function () {
+    var t = this;
+    if (!navigator.geolocation) {
+      t.show_text_message('Not supported', 'Your browser does not support geolocation.');
+      return;
+    }
+
+    var $btn = $('#btn-my-location');
+    var $icon = $btn.find('i');
+    $btn.prop('disabled', true);
+    $icon.removeClass('bi-geo-alt-fill').addClass('bi-hourglass-split geo-spin');
+
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        var lat = pos.coords.latitude;
+        var lng = pos.coords.longitude;
+        var latLng = new google.maps.LatLng(lat, lng);
+
+        // Reverse geocode to get a human-readable address
+        var geocoder = new google.maps.Geocoder();
+        geocoder.geocode({ location: latLng }, function (results, status) {
+          $btn.prop('disabled', false);
+          $icon.removeClass('bi-hourglass-split geo-spin').addClass('bi-geo-alt-fill');
+
+          var address = (status === 'OK' && results && results[0])
+            ? results[0].formatted_address
+            : lat.toFixed(6) + ', ' + lng.toFixed(6);
+
+          $('#txt-address').val(address);
+          t.txt_point.val(latLng.toUrlValue());
+
+          t.infowindow.setContent('Your location: <br/><strong class="fw-bold">' + t.escape_html(address) + '</strong>');
+          t.marker.setOptions({ position: latLng, visible: true });
+
+          t.save_to_history(address, latLng);
+          t.clear_markers();
+          t.set_accessibility(true);
+
+          if (t.is_circle())
+            t.circle.setOptions({ center: latLng, visible: true });
+          else if (t.rectangle.getVisible())
+            t.move_rectange(latLng);
+
+          var zoom = t.min_visible_zoom(lat, t.circle_distance || t.get_meters());
+          t.map.setOptions({ center: latLng, zoom });
+        });
+      },
+      function (err) {
+        $btn.prop('disabled', false);
+        $icon.removeClass('bi-hourglass-split geo-spin').addClass('bi-geo-alt-fill');
+        var msgs = {
+          1: 'Location access was denied. Please allow location permission in your browser.',
+          2: 'Your location could not be determined. Please try again.',
+          3: 'Location request timed out. Please try again.'
+        };
+        t.show_text_message('Location unavailable', msgs[err.code] || 'Unable to get your location.');
+      },
+      { timeout: 10000, maximumAge: 60000, enableHighAccuracy: false }
+    );
+  };
+
   // ────────────────────────────────────────────────────────────────────────
 
   this.initialize = function () {
@@ -1090,6 +1153,12 @@ window.ElasticsearchRestaurants = function() {
     $('#btn-share').click(function (e) {
       e.preventDefault();
       t.share_search();
+    });
+
+    // My Location button
+    $('#btn-my-location').click(function (e) {
+      e.preventDefault();
+      t.use_my_location();
     });
 
     // Restore state from URL hash if present

@@ -138,6 +138,16 @@ mark.lv-highlight {
   white-space: nowrap;
 }
 
+/* My Location button spinner */
+@keyframes geo-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.geo-spin {
+  display: inline-block;
+  animation: geo-spin 1s linear infinite;
+}
+
 /* Favorites star button */
 .lv-fav-btn {
   background: none;

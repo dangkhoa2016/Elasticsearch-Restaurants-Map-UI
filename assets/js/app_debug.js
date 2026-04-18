@@ -652,6 +652,67 @@ function show_share_feedback(success) {
   }, 2000);
 }
 
+// ── My Location ────────────────────────────────────────────────────
+
+function use_my_location() {
+  if (!navigator.geolocation) {
+    show_text_message('Not supported', 'Your browser does not support geolocation.');
+    return;
+  }
+
+  var $btn = $('#btn-my-location');
+  var $icon = $btn.find('i');
+  $btn.prop('disabled', true);
+  $icon.removeClass('bi-geo-alt-fill').addClass('bi-hourglass-split geo-spin');
+
+  navigator.geolocation.getCurrentPosition(
+    function (pos) {
+      var lat = pos.coords.latitude;
+      var lng = pos.coords.longitude;
+      var latLng = new google.maps.LatLng(lat, lng);
+
+      var geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ location: latLng }, function (results, status) {
+        $btn.prop('disabled', false);
+        $icon.removeClass('bi-hourglass-split geo-spin').addClass('bi-geo-alt-fill');
+
+        var address = (status === 'OK' && results && results[0])
+          ? results[0].formatted_address
+          : lat.toFixed(6) + ', ' + lng.toFixed(6);
+
+        $('#txt-address').val(address);
+        txt_point.val(latLng.toUrlValue());
+
+        infowindow.setContent('Your location: <br/><strong class="fw-bold">' + escape_html(address) + '</strong>');
+        marker.setOptions({ position: latLng, visible: true });
+
+        save_to_history(address, latLng);
+        clear_markers();
+        set_accessibility(true);
+
+        if (is_circle())
+          circle.setOptions({ center: latLng, visible: true });
+        else if (rectangle.getVisible())
+          move_rectange(latLng);
+
+        var zoom = min_visible_zoom(lat, circle_distance || get_meters());
+        map.setOptions({ center: latLng, zoom });
+      });
+    },
+    function (err) {
+      $btn.prop('disabled', false);
+      $icon.removeClass('bi-hourglass-split geo-spin').addClass('bi-geo-alt-fill');
+      var msgs = {
+        1: 'Location access was denied. Please allow location permission in your browser.',
+        2: 'Your location could not be determined. Please try again.',
+        3: 'Location request timed out. Please try again.'
+      };
+      show_text_message('Location unavailable', msgs[err.code] || 'Unable to get your location.');
+    },
+    { timeout: 10000, maximumAge: 60000, enableHighAccuracy: false }
+  );
+}
+
 // ────────────────────────────────────────────────────────────────────────
 
 function initialize() {
@@ -992,6 +1053,12 @@ function init_other() {
   $('#btn-share').click(function (e) {
     e.preventDefault();
     share_search();
+  });
+
+  // My Location button
+  $('#btn-my-location').click(function (e) {
+    e.preventDefault();
+    use_my_location();
   });
 
   // Restore state from URL hash if present

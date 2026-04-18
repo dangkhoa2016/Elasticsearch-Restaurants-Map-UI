@@ -2,27 +2,62 @@
   tabindex='-1' aria-labelledby='list-view-label'>
   <div class='offcanvas-header border-bottom py-2'>
     <h5 class='offcanvas-title mb-0' id='list-view-label'>
-      <i class='bi-list-ul me-1' aria-hidden='true'></i>Results
-      <span id='list-view-count' class='badge bg-secondary ms-1 fw-normal' style='font-size:0.75rem'></span>
+      <i class='bi-list-ul me-1' aria-hidden='true'></i>Restaurants
     </h5>
     <button type='button' class='btn-close' data-bs-dismiss='offcanvas' aria-label='Close list view'></button>
   </div>
-  <div class='px-2 py-1 border-bottom bg-light d-flex align-items-center gap-2' id='list-view-sort-bar'>
-    <label for='list-sort' class='text-muted mb-0' style='font-size:0.78rem;white-space:nowrap'>
-      <i class='bi-sort-down' aria-hidden='true'></i> Sort:
-    </label>
-    <select id='list-sort' class='form-select form-select-sm py-0' style='font-size:0.8rem;height:26px'>
-      <option value='distance'>Distance (near first)</option>
-      <option value='distance-desc'>Distance (far first)</option>
-      <option value='name'>Name (A → Z)</option>
-      <option value='name-desc'>Name (Z → A)</option>
-    </select>
-  </div>
-  <div class='offcanvas-body p-0' id='list-view-body'>
-    <div id='list-view-empty' class='text-center text-muted py-5' style='display:none'>
-      <i class='bi-search' style='font-size:2rem' aria-hidden='true'></i>
-      <p class='mt-2'>No results yet.<br/>Run a search to see restaurants here.</p>
+
+  <!-- Tab navigation -->
+  <ul class='nav nav-tabs px-2 pt-1' style='flex-shrink:0' role='tablist'>
+    <li class='nav-item' role='presentation'>
+      <button class='nav-link active' id='tab-results-btn' data-bs-toggle='tab' data-bs-target='#pane-results'
+        role='tab' aria-selected='true'>
+        Results
+        <span id='list-view-count' class='badge bg-secondary ms-1 fw-normal' style='font-size:0.72rem'></span>
+      </button>
+    </li>
+    <li class='nav-item' role='presentation'>
+      <button class='nav-link' id='tab-favorites-btn' data-bs-toggle='tab' data-bs-target='#pane-favorites'
+        role='tab' aria-selected='false'>
+        <i class='bi-star-fill text-warning' aria-hidden='true'></i> Saved
+        <span id='fav-count' class='badge bg-warning text-dark ms-1 fw-normal' style='font-size:0.72rem;display:none'></span>
+      </button>
+    </li>
+  </ul>
+
+  <!-- Tab content (acts as scrollable body) -->
+  <div style='flex:1 1 0;overflow-y:auto'>
+    <div class='tab-content h-100'>
+
+      <!-- Results pane -->
+      <div class='tab-pane fade show active' id='pane-results' role='tabpanel' aria-labelledby='tab-results-btn'>
+        <div class='px-2 py-1 border-bottom bg-light d-flex align-items-center gap-2' id='list-view-sort-bar' style='display:none !important'>
+          <label for='list-sort' class='text-muted mb-0' style='font-size:0.78rem;white-space:nowrap'>
+            <i class='bi-sort-down' aria-hidden='true'></i> Sort:
+          </label>
+          <select id='list-sort' class='form-select form-select-sm py-0' style='font-size:0.8rem;height:26px'>
+            <option value='distance'>Distance (near first)</option>
+            <option value='distance-desc'>Distance (far first)</option>
+            <option value='name'>Name (A → Z)</option>
+            <option value='name-desc'>Name (Z → A)</option>
+          </select>
+        </div>
+        <div id='list-view-empty' class='text-center text-muted py-5' style='display:none'>
+          <i class='bi-search' style='font-size:2rem' aria-hidden='true'></i>
+          <p class='mt-2'>No results yet.<br/>Run a search to see restaurants here.</p>
+        </div>
+        <div id='list-view-items'></div>
+      </div>
+
+      <!-- Favorites pane -->
+      <div class='tab-pane fade' id='pane-favorites' role='tabpanel' aria-labelledby='tab-favorites-btn'>
+        <div id='fav-empty' class='text-center text-muted py-5'>
+          <i class='bi-star' style='font-size:2rem' aria-hidden='true'></i>
+          <p class='mt-2'>No saved restaurants.<br/>Click <i class='bi-star-fill text-warning'></i> on a restaurant to save it.</p>
+        </div>
+        <div id='fav-items'></div>
+      </div>
+
     </div>
-    <div id='list-view-items'></div>
   </div>
 </div>

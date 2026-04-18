@@ -61,11 +61,13 @@ var arr_markers = [];
 var arr_restaurants = [];
 var arr_list_data = [];
 var clusterer = null;
+var fav_temp_marker = null;
 var search_result_message = '';
 var max_search_results = runtimeConfig.maxSearchResults || 80;
 var autocomplete_country_restriction = runtimeConfig.autocompleteCountryRestriction || '';
 var history_storage_key = 'er_search_history';
 var max_history_items = 8;
+var fav_storage_key = 'er_favorites';
 
 // Cached jQuery DOM references (populated in init_other)
 var $sel_enlarge_type = null;
@@ -167,6 +169,7 @@ function get_restaurant_marker_data(restaurant) {
   var lng = to_number(location.lon, NaN);
   if (!is_latitude(lat) || !is_longitude(lng)) return null;
   return {
+    id: restaurant._id || '',
     lat,
     lng,
     title: escape_html(source.name || 'Restaurant'),
@@ -176,10 +179,18 @@ function get_restaurant_marker_data(restaurant) {
 }
 
 function build_restaurant_info_content(markerData) {
+  var isFav = is_favorite(markerData.id);
+  var favClass = isFav ? ' is-fav' : '';
+  var favTitle = isFav ? 'Remove from saved' : 'Save restaurant';
+  var favIcon = isFav ? '&#9733;' : '&#9734;';
+  var idAttr = escape_html(markerData.id || '');
   var locationText = escape_html(markerData.lat + ', ' + markerData.lng);
   var fallback = escape_html(fallback_restaurant_photo);
   return '<div class="iw-main">' +
-    '<h4 title="Location: ' + locationText + '">' + markerData.title + '</h4>' +
+    '<div class="d-flex justify-content-between align-items-start mb-1">' +
+    '<h4 class="mb-0 me-2" title="Location: ' + locationText + '">' + markerData.title + '</h4>' +
+    '<button type="button" class="lv-fav-btn iw-fav-btn' + favClass + '" data-fav-id="' + idAttr + '" aria-label="' + favTitle + '" title="' + favTitle + '"><span class="fav-icon">' + favIcon + '</span></button>' +
+    '</div>' +
     '<div class="iw-body">' +
     '<img src="' + escape_html(markerData.photo) + '" class="float-start me-3 iw-img" alt="' + markerData.title + '" onerror="this.onerror=null;this.src=\'' + fallback + '\'">' +
     '<div>' + markerData.description + '</div>' +
@@ -231,7 +242,10 @@ function render_search_history() {
         txt_point.val(latLng.toUrlValue());
         infowindow.setContent('Your location: <br/><strong class="fw-bold">' + escape_html(item.address) + '</strong>');
         marker.setOptions({ position: latLng, visible: true });
-        map.setOptions({ center: latLng, zoom: 12 });
+        clear_markers();
+        set_accessibility(true);
+        var zoom = min_visible_zoom(latLng.lat(), circle_distance || get_meters());
+        map.setOptions({ center: latLng, zoom });
         if (is_circle())
           circle.setOptions({ center: latLng, visible: true });
         else if (rectangle.getVisible())
@@ -245,6 +259,129 @@ function render_search_history() {
 function clear_search_history() {
   try { localStorage.removeItem(history_storage_key); } catch (e) { /* noop */ }
   render_search_history();
+}
+
+function load_favorites() {
+  try {
+    var raw = localStorage.getItem(fav_storage_key);
+    var parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) { return []; }
+}
+
+function save_favorites(arr) {
+  try {
+    localStorage.setItem(fav_storage_key, JSON.stringify(arr));
+  } catch (e) { /* storage full or unavailable */ }
+}
+
+function is_favorite(id) {
+  if (!id) return false;
+  return load_favorites().some(function (f) { return f.id === id; });
+}
+
+function toggle_favorite(item) {
+  if (!item || !item.id) return;
+  var favs = load_favorites();
+  var idx = favs.findIndex(function (f) { return f.id === item.id; });
+  var nowFav;
+  if (idx >= 0) {
+    favs.splice(idx, 1);
+    nowFav = false;
+  } else {
+    favs.push({ id: item.id, title: item.title, description: item.description, photo: item.photo, lat: item.lat, lng: item.lng });
+    nowFav = true;
+  }
+  save_favorites(favs);
+  update_fav_ui(item.id, nowFav);
+  render_favorites_tab();
+}
+
+function update_fav_ui(id, isFav) {
+  $('[data-fav-id="' + id + '"]').each(function () {
+    $(this).toggleClass('is-fav', isFav)
+      .attr('aria-label', isFav ? 'Remove from saved' : 'Save restaurant')
+      .attr('title', isFav ? 'Remove from saved' : 'Save restaurant');
+    $(this).find('.fav-icon').text(isFav ? '\u2605' : '\u2606');
+  });
+  var count = load_favorites().length;
+  $('#fav-count').text(count || '').toggle(count > 0);
+}
+
+function render_favorites_tab() {
+  var favs = load_favorites();
+  var $empty = $('#fav-empty');
+  var $list = $('#fav-items');
+  var count = favs.length;
+  $('#fav-count').text(count || '').toggle(count > 0);
+  $list.empty();
+  if (count === 0) { $empty.show(); return; }
+  $empty.hide();
+  favs.forEach(function (fav) {
+    var $card = $('<div>').addClass('lv-card lv-fav-card').attr({
+      role: 'button', tabindex: '0', 'aria-label': 'Go to ' + fav.title
+    });
+    var $thumb = $('<img>').addClass('lv-thumb').attr({ src: fav.photo, alt: fav.title })
+      .on('error', function () { $(this).attr('src', fallback_restaurant_photo); });
+    var $info = $('<div>').addClass('lv-info');
+    var $titleRow = $('<div>').addClass('d-flex justify-content-between');
+    var $title = $('<div>').addClass('lv-title').text(fav.title);
+    var $desc = $('<div>').addClass('lv-desc').text(fav.description);
+    $titleRow.append($title);
+    $info.append($titleRow, $desc);
+    var $favBtn = $('<button>').addClass('lv-fav-btn is-fav')
+      .attr({ type: 'button', 'data-fav-id': fav.id, 'aria-label': 'Remove from saved', title: 'Remove from saved' })
+      .html('<span class="fav-icon">\u2605</span>');
+    $card.append($thumb, $info, $favBtn);
+    var clickHandler = function (e) {
+      if ($(e.target).closest('.lv-fav-btn').length) return;
+      show_fav_on_map(fav);
+    };
+    $card.click(clickHandler).keydown(function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clickHandler(e); }
+    });
+    $list.append($card);
+  });
+}
+
+function show_fav_on_map(fav) {
+  var pos = new google.maps.LatLng(fav.lat, fav.lng);
+  map.panTo(pos);
+  if (map.getZoom() < 15) map.setZoom(15);
+
+  // Use the real marker if this restaurant is in the current search results
+  var currentItem = arr_list_data.find(function (d) { return d.id === fav.id; });
+  if (currentItem) {
+    var mk = arr_markers[arr_list_data.indexOf(currentItem)];
+    if (mk) {
+      infowindow_restaurant.setContent(build_restaurant_info_content(currentItem));
+      infowindow_restaurant.open({ anchor: mk, map });
+      return;
+    }
+  }
+
+  // Restaurant is from a different search — use a temporary marker
+  if (fav_temp_marker) {
+    google.maps.event.clearInstanceListeners(fav_temp_marker);
+    fav_temp_marker.setMap(null);
+    fav_temp_marker = null;
+  }
+  fav_temp_marker = new google.maps.Marker({
+    position: pos,
+    map: map,
+    title: fav.title,
+    animation: google.maps.Animation.DROP,
+    icon: {
+      url: marker_icon,
+      scaledSize: { width: 35, height: 35 }
+    }
+  });
+  infowindow_restaurant.setContent(build_restaurant_info_content(fav));
+  infowindow_restaurant.open({ anchor: fav_temp_marker, map });
+  fav_temp_marker.addListener('click', function () {
+    infowindow_restaurant.setContent(build_restaurant_info_content(fav));
+    infowindow_restaurant.open({ anchor: fav_temp_marker, map });
+  });
 }
 
 function format_distance(meters) {
@@ -337,10 +474,18 @@ function render_list_view(items) {
     $titleRow.append($title, $dist);
     var $desc = $('<div>').addClass('lv-desc').text(item.description);
 
-    $info.append($titleRow, $desc);
-    $card.append($thumb, $info);
+    var isFav = is_favorite(item.id);
+    var $favBtn = $('<button>').addClass('lv-fav-btn' + (isFav ? ' is-fav' : ''))
+      .attr({ type: 'button', 'data-fav-id': item.id || '',
+        'aria-label': isFav ? 'Remove from saved' : 'Save restaurant',
+        title: isFav ? 'Remove from saved' : 'Save restaurant' })
+      .html('<span class="fav-icon">' + (isFav ? '\u2605' : '\u2606') + '</span>');
 
-    var clickHandler = function () {
+    $info.append($titleRow, $desc);
+    $card.append($thumb, $info, $favBtn);
+
+    var clickHandler = function (e) {
+      if ($(e.target).closest('.lv-fav-btn').length) return;
       var mk = arr_markers[markerIndex];
       if (!mk) return;
       map.panTo(mk.getPosition());
@@ -352,7 +497,7 @@ function render_list_view(items) {
     };
 
     $card.click(clickHandler).keydown(function (e) {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clickHandler(); }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clickHandler(e); }
     });
 
     $body.append($card);
@@ -486,7 +631,7 @@ function initialize() {
       map.fitBounds(place.geometry.viewport);
     } else {
       map.setCenter(place.geometry.location);
-      map.setZoom(12);
+      map.setZoom(15);
     }
 
     txt_point.val(place.geometry.location.toUrlValue());
@@ -502,6 +647,16 @@ function initialize() {
       circle.setOptions({ center: place.geometry.location, visible: true });
     else if (rectangle.getVisible())
       move_rectange(place.geometry.location);
+
+    if (is_circle()) {
+      google.maps.event.addListenerOnce(map, 'idle', function () {
+        if (!circle.getVisible()) return;
+        var c = circle.getCenter();
+        if (!c) return;
+        var minZoom = min_visible_zoom(c.lat(), circle.getRadius());
+        if (map.getZoom() < minZoom) map.setZoom(minZoom);
+      });
+    }
   });
 
   init_other();
@@ -542,7 +697,8 @@ function set_point(txt) {
   else if (rectangle.getVisible())
     move_rectange(latLng);
 
-  map.setOptions({ center: latLng, zoom: 14 });
+  var zoom = min_visible_zoom(latLng.lat(), circle_distance || get_meters());
+  map.setOptions({ center: latLng, zoom });
   map.panTo(latLng);
 };
 
@@ -558,10 +714,17 @@ function move_rectange(latLng) {
 };
 
 function redraw_from_distance() {
-  if (is_circle())
-    circle.setRadius(circle_distance || get_meters());
-  else
-    move_rectange(marker.getPosition());
+  if (is_circle()) {
+    var r = circle_distance || get_meters();
+    if (marker.getVisible()) {
+      circle.setOptions({ center: marker.getPosition(), radius: r, visible: true });
+    } else {
+      circle.setRadius(r);
+    }
+  } else {
+    if (marker.getVisible())
+      move_rectange(marker.getPosition());
+  }
 };
 
 function init_other() {
@@ -613,6 +776,20 @@ function init_other() {
   });
 
   render_search_history();
+  render_favorites_tab();
+
+  // Favorite toggle — covers list cards, favorites panel, and info window buttons
+  $(document).on('click', '[data-fav-id]', function (e) {
+    e.stopPropagation();
+    var id = $(this).attr('data-fav-id');
+    if (!id) return;
+    var item = arr_list_data.find(function (d) { return d.id === id; });
+    if (!item) {
+      var favs = load_favorites();
+      item = favs.find(function (f) { return f.id === id; });
+    }
+    if (item) toggle_favorite(item);
+  });
 
   $('#list-sort').change(function () {
     if (arr_list_data && arr_list_data.length > 0)
@@ -808,6 +985,11 @@ function set_accessibility(enabled) {
 
 function clear_markers() {
   infowindow_restaurant.close();
+  if (fav_temp_marker) {
+    google.maps.event.clearInstanceListeners(fav_temp_marker);
+    fav_temp_marker.setMap(null);
+    fav_temp_marker = null;
+  }
   if (clusterer) {
     clusterer.clearMarkers();
     clusterer = null;
@@ -880,6 +1062,14 @@ function bind_dropdown_text(el) {
 
 function is_circle() {
   return ($sel_enlarge_type || $('#sel-enlarge-type')).val() === 'circle';
+};
+
+function min_visible_zoom(latitude, radiusMeters, minPxRadius) {
+  if (!(minPxRadius > 0)) minPxRadius = 25;
+  if (!(radiusMeters > 0)) return 15;
+  var cosLat = Math.cos(latitude * Math.PI / 180);
+  var zoom = Math.ceil(Math.log2(156543.03392 * cosLat * minPxRadius / radiusMeters));
+  return Math.min(Math.max(zoom, 10), 18);
 };
 
 function handle_change_measure(el, redraw = true) {

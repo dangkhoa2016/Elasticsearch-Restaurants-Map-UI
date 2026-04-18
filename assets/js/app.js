@@ -62,11 +62,13 @@ window.ElasticsearchRestaurants = function() {
   this.arr_restaurants = [];
   this.arr_list_data = [];
   this.clusterer = null;
+  this.fav_temp_marker = null;
   this.search_result_message = '';
   this.max_search_results = config.maxSearchResults;
   this.autocomplete_country_restriction = config.autocompleteCountryRestriction || '';
   this.history_storage_key = 'er_search_history';
   this.max_history_items = 8;
+  this.fav_storage_key = 'er_favorites';
 
   // Cached jQuery DOM references (populated in init_other)
   this.$sel_enlarge_type = null;
@@ -186,6 +188,7 @@ window.ElasticsearchRestaurants = function() {
       return null;
 
     return {
+      id: restaurant._id || '',
       lat,
       lng,
       title: this.escape_html(source.name || 'Restaurant'),
@@ -195,12 +198,21 @@ window.ElasticsearchRestaurants = function() {
   };
 
   this.build_restaurant_info_content = function (restaurant) {
-    var locationText = this.escape_html(`${restaurant.lat}, ${restaurant.lng}`);
-    var fallback = this.escape_html(this.fallback_restaurant_photo);
+    var t = this;
+    var isFav = t.is_favorite(restaurant.id);
+    var favClass = isFav ? ' is-fav' : '';
+    var favTitle = isFav ? 'Remove from saved' : 'Save restaurant';
+    var favIcon = isFav ? '&#9733;' : '&#9734;';
+    var idAttr = t.escape_html(restaurant.id || '');
+    var locationText = t.escape_html(`${restaurant.lat}, ${restaurant.lng}`);
+    var fallback = t.escape_html(t.fallback_restaurant_photo);
     return `<div class="iw-main">
-      <h4 title="Location: ${locationText}">${restaurant.title}</h4>
+      <div class="d-flex justify-content-between align-items-start mb-1">
+        <h4 class="mb-0 me-2" title="Location: ${locationText}">${restaurant.title}</h4>
+        <button type="button" class="lv-fav-btn iw-fav-btn${favClass}" data-fav-id="${idAttr}" aria-label="${favTitle}" title="${favTitle}"><span class="fav-icon">${favIcon}</span></button>
+      </div>
       <div class="iw-body">
-      <img src="${this.escape_html(restaurant.photo)}" class="float-start me-3 iw-img" alt="${restaurant.title}" onerror="this.onerror=null;this.src='${fallback}'">
+      <img src="${t.escape_html(restaurant.photo)}" class="float-start me-3 iw-img" alt="${restaurant.title}" onerror="this.onerror=null;this.src='${fallback}'">
       <div>${restaurant.description}</div>
       </div>
     </div>`;
@@ -253,7 +265,10 @@ window.ElasticsearchRestaurants = function() {
           t.txt_point.val(latLng.toUrlValue());
           t.infowindow.setContent('Your location: <br/><strong class="fw-bold">' + t.escape_html(item.address) + '</strong>');
           t.marker.setOptions({ position: latLng, visible: true });
-          t.map.setOptions({ center: latLng, zoom: 12 });
+          t.clear_markers();
+          t.set_accessibility(true);
+          var zoom = t.min_visible_zoom(latLng.lat(), t.circle_distance || t.get_meters());
+          t.map.setOptions({ center: latLng, zoom });
           if (t.is_circle())
             t.circle.setOptions({ center: latLng, visible: true });
           else if (t.rectangle.getVisible())
@@ -267,6 +282,131 @@ window.ElasticsearchRestaurants = function() {
   this.clear_search_history = function () {
     try { localStorage.removeItem(this.history_storage_key); } catch (e) { /* noop */ }
     this.render_search_history();
+  };
+
+  this.load_favorites = function () {
+    try {
+      var raw = localStorage.getItem(this.fav_storage_key);
+      var parsed = JSON.parse(raw || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) { return []; }
+  };
+
+  this.save_favorites = function (arr) {
+    try {
+      localStorage.setItem(this.fav_storage_key, JSON.stringify(arr));
+    } catch (e) { /* storage full or unavailable */ }
+  };
+
+  this.is_favorite = function (id) {
+    if (!id) return false;
+    return this.load_favorites().some(function (f) { return f.id === id; });
+  };
+
+  this.toggle_favorite = function (item) {
+    if (!item || !item.id) return;
+    var favs = this.load_favorites();
+    var idx = favs.findIndex(function (f) { return f.id === item.id; });
+    var nowFav;
+    if (idx >= 0) {
+      favs.splice(idx, 1);
+      nowFav = false;
+    } else {
+      favs.push({ id: item.id, title: item.title, description: item.description, photo: item.photo, lat: item.lat, lng: item.lng });
+      nowFav = true;
+    }
+    this.save_favorites(favs);
+    this.update_fav_ui(item.id, nowFav);
+    this.render_favorites_tab();
+  };
+
+  this.update_fav_ui = function (id, isFav) {
+    $('[data-fav-id="' + id + '"]').each(function () {
+      $(this).toggleClass('is-fav', isFav)
+        .attr('aria-label', isFav ? 'Remove from saved' : 'Save restaurant')
+        .attr('title', isFav ? 'Remove from saved' : 'Save restaurant');
+      $(this).find('.fav-icon').text(isFav ? '\u2605' : '\u2606');
+    });
+    var count = this.load_favorites().length;
+    $('#fav-count').text(count || '').toggle(count > 0);
+  };
+
+  this.render_favorites_tab = function () {
+    var t = this;
+    var favs = t.load_favorites();
+    var $empty = $('#fav-empty');
+    var $list = $('#fav-items');
+    var count = favs.length;
+    $('#fav-count').text(count || '').toggle(count > 0);
+    $list.empty();
+    if (count === 0) { $empty.show(); return; }
+    $empty.hide();
+    favs.forEach(function (fav) {
+      var $card = $('<div>').addClass('lv-card lv-fav-card').attr({
+        role: 'button', tabindex: '0', 'aria-label': 'Go to ' + fav.title
+      });
+      var $thumb = $('<img>').addClass('lv-thumb').attr({ src: fav.photo, alt: fav.title })
+        .on('error', function () { $(this).attr('src', t.fallback_restaurant_photo); });
+      var $info = $('<div>').addClass('lv-info');
+      var $titleRow = $('<div>').addClass('d-flex justify-content-between');
+      var $title = $('<div>').addClass('lv-title').text(fav.title);
+      var $desc = $('<div>').addClass('lv-desc').text(fav.description);
+      $titleRow.append($title);
+      $info.append($titleRow, $desc);
+      var $favBtn = $('<button>').addClass('lv-fav-btn is-fav')
+        .attr({ type: 'button', 'data-fav-id': fav.id, 'aria-label': 'Remove from saved', title: 'Remove from saved' })
+        .html('<span class="fav-icon">\u2605</span>');
+      $card.append($thumb, $info, $favBtn);
+      var clickHandler = function (e) {
+        if ($(e.target).closest('.lv-fav-btn').length) return;
+        t.show_fav_on_map(fav);
+      };
+      $card.click(clickHandler).keydown(function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clickHandler(e); }
+      });
+      $list.append($card);
+    });
+  };
+
+  this.show_fav_on_map = function (fav) {
+    var t = this;
+    var pos = new google.maps.LatLng(fav.lat, fav.lng);
+    t.map.panTo(pos);
+    if (t.map.getZoom() < 15) t.map.setZoom(15);
+
+    // Use the real marker if this restaurant is in the current search results
+    var currentItem = t.arr_list_data.find(function (d) { return d.id === fav.id; });
+    if (currentItem) {
+      var mk = t.arr_markers[t.arr_list_data.indexOf(currentItem)];
+      if (mk) {
+        t.infowindow_restaurant.setContent(t.build_restaurant_info_content(currentItem));
+        t.infowindow_restaurant.open({ anchor: mk, map: t.map });
+        return;
+      }
+    }
+
+    // Restaurant is from a different search — use a temporary marker
+    if (t.fav_temp_marker) {
+      google.maps.event.clearInstanceListeners(t.fav_temp_marker);
+      t.fav_temp_marker.setMap(null);
+      t.fav_temp_marker = null;
+    }
+    t.fav_temp_marker = new google.maps.Marker({
+      position: pos,
+      map: t.map,
+      title: fav.title,
+      animation: google.maps.Animation.DROP,
+      icon: {
+        url: t.marker_icon,
+        scaledSize: { width: 35, height: 35 }
+      }
+    });
+    t.infowindow_restaurant.setContent(t.build_restaurant_info_content(fav));
+    t.infowindow_restaurant.open({ anchor: t.fav_temp_marker, map: t.map });
+    t.fav_temp_marker.addListener('click', function () {
+      t.infowindow_restaurant.setContent(t.build_restaurant_info_content(fav));
+      t.infowindow_restaurant.open({ anchor: t.fav_temp_marker, map: t.map });
+    });
   };
 
   this.format_distance = function (meters) {
@@ -362,10 +502,18 @@ window.ElasticsearchRestaurants = function() {
       $titleRow.append($title, $dist);
       var $desc = $('<div>').addClass('lv-desc').text(item.description);
 
-      $info.append($titleRow, $desc);
-      $card.append($thumb, $info);
+      var isFav = t.is_favorite(item.id);
+      var $favBtn = $('<button>').addClass('lv-fav-btn' + (isFav ? ' is-fav' : ''))
+        .attr({ type: 'button', 'data-fav-id': item.id || '',
+          'aria-label': isFav ? 'Remove from saved' : 'Save restaurant',
+          title: isFav ? 'Remove from saved' : 'Save restaurant' })
+        .html('<span class="fav-icon">' + (isFav ? '\u2605' : '\u2606') + '</span>');
 
-      var clickHandler = function () {
+      $info.append($titleRow, $desc);
+      $card.append($thumb, $info, $favBtn);
+
+      var clickHandler = function (e) {
+        if ($(e.target).closest('.lv-fav-btn').length) return;
         var mk = t.arr_markers[markerIndex];
         if (!mk) return;
         t.map.panTo(mk.getPosition());
@@ -377,7 +525,7 @@ window.ElasticsearchRestaurants = function() {
       };
 
       $card.click(clickHandler).keydown(function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clickHandler(); }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clickHandler(e); }
       });
 
       $body.append($card);
@@ -505,7 +653,7 @@ window.ElasticsearchRestaurants = function() {
         t.map.fitBounds(place.geometry.viewport);
       } else {
         t.map.setCenter(place.geometry.location);
-        t.map.setZoom(12);
+        t.map.setZoom(15);
       }
 
       t.txt_point.val(place.geometry.location.toUrlValue());
@@ -521,6 +669,18 @@ window.ElasticsearchRestaurants = function() {
         t.circle.setOptions({ center: place.geometry.location, visible: true });
       else if (t.rectangle.getVisible())
         t.move_rectange(place.geometry.location);
+
+      // After fitBounds animation settles, ensure the map is zoomed in enough
+      // to make the red circle clearly visible (fitBounds may zoom out too far).
+      if (t.is_circle()) {
+        google.maps.event.addListenerOnce(t.map, 'idle', function () {
+          if (!t.circle.getVisible()) return;
+          var c = t.circle.getCenter();
+          if (!c) return;
+          var minZoom = t.min_visible_zoom(c.lat(), t.circle.getRadius());
+          if (t.map.getZoom() < minZoom) t.map.setZoom(minZoom);
+        });
+      }
     });
 
     t.init_other();
@@ -561,7 +721,8 @@ window.ElasticsearchRestaurants = function() {
     else if (t.rectangle.getVisible())
       t.move_rectange(latLng);
 
-    t.map.setOptions({ center: latLng, zoom: 14 });
+    var zoom = t.min_visible_zoom(latLng.lat(), t.circle_distance || t.get_meters());
+    t.map.setOptions({ center: latLng, zoom });
     t.map.panTo(latLng);
   };
 
@@ -579,10 +740,19 @@ window.ElasticsearchRestaurants = function() {
 
   this.redraw_from_distance = function () {
     var t = this;
-    if (t.is_circle())
-      t.circle.setRadius(t.circle_distance || t.get_meters());
-    else
-      t.move_rectange(t.marker.getPosition());
+    if (t.is_circle()) {
+      var r = t.circle_distance || t.get_meters();
+      if (t.marker.getVisible()) {
+        // Re-center the circle on the current marker position and ensure it is visible.
+        // This guards against the circle drifting or losing visibility after zoom/pans.
+        t.circle.setOptions({ center: t.marker.getPosition(), radius: r, visible: true });
+      } else {
+        t.circle.setRadius(r);
+      }
+    } else {
+      if (t.marker.getVisible())
+        t.move_rectange(t.marker.getPosition());
+    }
   };
 
   this.init_other = function () {
@@ -636,6 +806,20 @@ window.ElasticsearchRestaurants = function() {
     });
 
     t.render_search_history();
+    t.render_favorites_tab();
+
+    // Favorite toggle — covers list cards, favorites panel, and info window buttons
+    $(document).on('click', '[data-fav-id]', function (e) {
+      e.stopPropagation();
+      var id = $(this).attr('data-fav-id');
+      if (!id) return;
+      var item = t.arr_list_data.find(function (d) { return d.id === id; });
+      if (!item) {
+        var favs = t.load_favorites();
+        item = favs.find(function (f) { return f.id === id; });
+      }
+      if (item) t.toggle_favorite(item);
+    });
 
     $('#list-sort').change(function () {
       if (t.arr_list_data && t.arr_list_data.length > 0)
@@ -844,6 +1028,11 @@ window.ElasticsearchRestaurants = function() {
   this.clear_markers = function () {
     var t = this;
     t.infowindow_restaurant.close();
+    if (t.fav_temp_marker) {
+      google.maps.event.clearInstanceListeners(t.fav_temp_marker);
+      t.fav_temp_marker.setMap(null);
+      t.fav_temp_marker = null;
+    }
     if (t.clusterer) {
       t.clusterer.clearMarkers();
       t.clusterer = null;
@@ -913,6 +1102,16 @@ window.ElasticsearchRestaurants = function() {
 
   this.is_circle = function () {
     return this.get_search_type() === 'circle';
+  };
+
+  // Returns the minimum map zoom level at which a circle of `radiusMeters`
+  // would appear at least `minPxRadius` pixels wide on screen at `latitude`.
+  this.min_visible_zoom = function (latitude, radiusMeters, minPxRadius) {
+    if (!(minPxRadius > 0)) minPxRadius = 25;
+    if (!(radiusMeters > 0)) return 15;
+    var cosLat = Math.cos(latitude * Math.PI / 180);
+    var zoom = Math.ceil(Math.log2(156543.03392 * cosLat * minPxRadius / radiusMeters));
+    return Math.min(Math.max(zoom, 10), 18);
   };
 
   this.handle_change_measure = function (el, redraw = true) {

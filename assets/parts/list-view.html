@@ -1,0 +1,17 @@
+<div id='list-view-panel' class='offcanvas offcanvas-end' data-bs-scroll='true' data-bs-backdrop='false'
+  tabindex='-1' aria-labelledby='list-view-label'>
+  <div class='offcanvas-header border-bottom py-2'>
+    <h5 class='offcanvas-title mb-0' id='list-view-label'>
+      <i class='bi-list-ul me-1' aria-hidden='true'></i>Results
+      <span id='list-view-count' class='badge bg-secondary ms-1 fw-normal' style='font-size:0.75rem'></span>
+    </h5>
+    <button type='button' class='btn-close' data-bs-dismiss='offcanvas' aria-label='Close list view'></button>
+  </div>
+  <div class='offcanvas-body p-0' id='list-view-body'>
+    <div id='list-view-empty' class='text-center text-muted py-5' style='display:none'>
+      <i class='bi-search' style='font-size:2rem' aria-hidden='true'></i>
+      <p class='mt-2'>No results yet.<br/>Run a search to see restaurants here.</p>
+    </div>
+    <div id='list-view-items'></div>
+  </div>
+</div>

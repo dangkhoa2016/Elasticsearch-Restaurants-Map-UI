@@ -60,6 +60,8 @@ window.ElasticsearchRestaurants = function() {
   `;
   this.arr_markers = [];
   this.arr_restaurants = [];
+  this.arr_list_data = [];
+  this.clusterer = null;
   this.search_result_message = '';
   this.max_search_results = config.maxSearchResults;
   this.autocomplete_country_restriction = config.autocompleteCountryRestriction || '';
@@ -104,6 +106,17 @@ window.ElasticsearchRestaurants = function() {
   this.to_number = function (value, fallback = 0) {
     var parsed = typeof value === 'number' ? value : parseFloat(value);
     return isFinite(parsed) ? parsed : fallback;
+  };
+
+  this.preload_image = function (src) {
+    var fallback = this.fallback_restaurant_photo;
+    return new Promise(function (resolve) {
+      if (!src) return resolve(fallback);
+      var img = new Image();
+      img.onload = function () { resolve(src); };
+      img.onerror = function () { resolve(fallback); };
+      img.src = src;
+    });
   };
 
   this.is_positive_number = function (value) {
@@ -183,10 +196,11 @@ window.ElasticsearchRestaurants = function() {
 
   this.build_restaurant_info_content = function (restaurant) {
     var locationText = this.escape_html(`${restaurant.lat}, ${restaurant.lng}`);
+    var fallback = this.escape_html(this.fallback_restaurant_photo);
     return `<div class="iw-main">
       <h4 title="Location: ${locationText}">${restaurant.title}</h4>
       <div class="iw-body">
-      <img src="${this.escape_html(restaurant.photo)}" class="float-start me-3 iw-img" alt="${restaurant.title}">
+      <img src="${this.escape_html(restaurant.photo)}" class="float-start me-3 iw-img" alt="${restaurant.title}" onerror="this.onerror=null;this.src='${fallback}'">
       <div>${restaurant.description}</div>
       </div>
     </div>`;
@@ -253,6 +267,67 @@ window.ElasticsearchRestaurants = function() {
   this.clear_search_history = function () {
     try { localStorage.removeItem(this.history_storage_key); } catch (e) { /* noop */ }
     this.render_search_history();
+  };
+
+  this.render_list_view = function (items) {
+    var t = this;
+    var $body = $('#list-view-items');
+    var $empty = $('#list-view-empty');
+    var $count = $('#list-view-count');
+    $body.empty();
+
+    if (!items || items.length === 0) {
+      $empty.show();
+      $count.text('');
+      return;
+    }
+
+    $empty.hide();
+    $count.text(items.length);
+
+    items.forEach(function (item, index) {
+      var $card = $('<div>').addClass('lv-card').attr({
+        role: 'button',
+        tabindex: '0',
+        'aria-label': 'View ' + item.title + ' on map'
+      });
+
+      var $thumb = $('<img>').addClass('lv-thumb')
+        .attr('src', item.photo)
+        .attr('alt', item.title)
+        .on('error', function () { $(this).attr('src', t.fallback_restaurant_photo); });
+
+      var $info = $('<div>').addClass('lv-info');
+      var $title = $('<div>').addClass('lv-title').text(item.title);
+      var $desc = $('<div>').addClass('lv-desc').text(item.description);
+
+      $info.append($title, $desc);
+      $card.append($thumb, $info);
+
+      // Click: pan to marker and open info window
+      var clickHandler = function () {
+        var mk = t.arr_markers[index];
+        if (!mk) return;
+        t.map.panTo(mk.getPosition());
+        if (t.map.getZoom() < 15) t.map.setZoom(15);
+        t.infowindow_restaurant.setContent(t.build_restaurant_info_content(item));
+        t.infowindow_restaurant.open({ anchor: mk, map: t.map });
+        // Close offcanvas on mobile after clicking
+        var offcanvas = bootstrap.Offcanvas.getInstance(document.getElementById('list-view-panel'));
+        if (offcanvas && window.innerWidth < 768) offcanvas.hide();
+      };
+
+      $card.click(clickHandler).keydown(function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clickHandler(); }
+      });
+
+      $body.append($card);
+    });
+  };
+
+  this.clear_list_view = function () {
+    this.arr_list_data = [];
+    this.render_list_view([]);
   };
 
   this.initialize = function () {
@@ -605,6 +680,9 @@ window.ElasticsearchRestaurants = function() {
 
     t.set_default();
 
+    // Show empty state for list view on startup
+    t.render_list_view([]);
+
   };
 
   this.toggle_loading = function (show) {
@@ -635,13 +713,15 @@ window.ElasticsearchRestaurants = function() {
     if (!Array.isArray(t.arr_restaurants) || t.arr_restaurants.length === 0)
       return;
 
+    var listData = [];
+
     t.arr_markers = t.arr_restaurants.reduce((markers, restaurant) => {
       var markerData = t.get_restaurant_marker_data(restaurant);
       if (!markerData)
         return markers;
 
       var r_marker = new google.maps.Marker({
-        map: t.map, position: { lat: markerData.lat, lng: markerData.lng },
+        position: { lat: markerData.lat, lng: markerData.lng },
         title: markerData.title,
         animation: google.maps.Animation.DROP,
         icon: {
@@ -652,15 +732,35 @@ window.ElasticsearchRestaurants = function() {
 
       r_marker.addListener("click", () => {
         t.infowindow_restaurant.setContent(t.build_restaurant_info_content(markerData));
-
-        t.infowindow_restaurant.open({
-          anchor: r_marker, map: t.map
-        });
+        t.infowindow_restaurant.open({ anchor: r_marker, map: t.map });
       });
 
       markers.push(r_marker);
+      listData.push(markerData);
       return markers;
     }, []);
+
+    t.arr_list_data = listData;
+
+    // Preload all photos then render list view with resolved URLs
+    Promise.all(listData.map(function (item) {
+      return t.preload_image(item.photo).then(function (resolvedUrl) {
+        item.photo = resolvedUrl;
+        return item;
+      });
+    })).then(function (resolvedList) {
+      t.render_list_view(resolvedList);
+    });
+
+    // Use MarkerClusterer if available, otherwise fall back to plain markers
+    if (window.markerClusterer && window.markerClusterer.MarkerClusterer) {
+      t.clusterer = new window.markerClusterer.MarkerClusterer({
+        map: t.map,
+        markers: t.arr_markers
+      });
+    } else {
+      t.arr_markers.forEach(function (mk) { mk.setMap(t.map); });
+    }
 
     t.arr_restaurants = [];
   };
@@ -680,6 +780,10 @@ window.ElasticsearchRestaurants = function() {
   this.clear_markers = function () {
     var t = this;
     t.infowindow_restaurant.close();
+    if (t.clusterer) {
+      t.clusterer.clearMarkers();
+      t.clusterer = null;
+    }
     if (Array.isArray(t.arr_markers) && t.arr_markers.length > 0) {
       t.arr_markers.map((mk) => {
         google.maps.event.clearInstanceListeners(mk);
@@ -687,6 +791,7 @@ window.ElasticsearchRestaurants = function() {
       });
       t.arr_markers = [];
     }
+    t.clear_list_view();
   };
 
   this.get_query_params = function () {

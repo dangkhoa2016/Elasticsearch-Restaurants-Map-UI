@@ -10,7 +10,7 @@
       '/assets/imgs/restaurant.png',
       '/assets/imgs/restaurant1-x64.png'
     ],
-    fallbackRestaurantPhoto: '/assets/imgs/restaurant-x64.png',
+    fallbackRestaurantPhoto: '/assets/imgs/placeholder.png',
     maxSearchResults: 80,
     autocompleteCountryRestriction: 'au',
   };

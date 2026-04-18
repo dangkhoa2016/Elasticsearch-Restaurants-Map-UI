@@ -59,6 +59,8 @@ var help_text = `
 `;
 var arr_markers = [];
 var arr_restaurants = [];
+var arr_list_data = [];
+var clusterer = null;
 var search_result_message = '';
 var max_search_results = runtimeConfig.maxSearchResults || 80;
 var autocomplete_country_restriction = runtimeConfig.autocompleteCountryRestriction || '';
@@ -93,6 +95,16 @@ function to_number(value, fallback) {
   if (fallback === undefined) fallback = 0;
   var parsed = typeof value === 'number' ? value : parseFloat(value);
   return isFinite(parsed) ? parsed : fallback;
+}
+
+function preload_image(src) {
+  return new Promise(function (resolve) {
+    if (!src) return resolve(fallback_restaurant_photo);
+    var img = new Image();
+    img.onload = function () { resolve(src); };
+    img.onerror = function () { resolve(fallback_restaurant_photo); };
+    img.src = src;
+  });
 }
 
 function is_positive_number(value) {
@@ -165,10 +177,11 @@ function get_restaurant_marker_data(restaurant) {
 
 function build_restaurant_info_content(markerData) {
   var locationText = escape_html(markerData.lat + ', ' + markerData.lng);
+  var fallback = escape_html(fallback_restaurant_photo);
   return '<div class="iw-main">' +
     '<h4 title="Location: ' + locationText + '">' + markerData.title + '</h4>' +
     '<div class="iw-body">' +
-    '<img src="' + escape_html(markerData.photo) + '" class="float-start me-3 iw-img" alt="' + markerData.title + '">' +
+    '<img src="' + escape_html(markerData.photo) + '" class="float-start me-3 iw-img" alt="' + markerData.title + '" onerror="this.onerror=null;this.src=\'' + fallback + '\'">' +
     '<div>' + markerData.description + '</div>' +
     '</div></div>';
 }
@@ -232,6 +245,64 @@ function render_search_history() {
 function clear_search_history() {
   try { localStorage.removeItem(history_storage_key); } catch (e) { /* noop */ }
   render_search_history();
+}
+
+function render_list_view(items) {
+  var $body = $('#list-view-items');
+  var $empty = $('#list-view-empty');
+  var $count = $('#list-view-count');
+  $body.empty();
+
+  if (!items || items.length === 0) {
+    $empty.show();
+    $count.text('');
+    return;
+  }
+
+  $empty.hide();
+  $count.text(items.length);
+
+  items.forEach(function (item, index) {
+    var $card = $('<div>').addClass('lv-card').attr({
+      role: 'button',
+      tabindex: '0',
+      'aria-label': 'View ' + item.title + ' on map'
+    });
+
+    var $thumb = $('<img>').addClass('lv-thumb')
+      .attr('src', item.photo)
+      .attr('alt', item.title)
+      .on('error', function () { $(this).attr('src', fallback_restaurant_photo); });
+
+    var $info = $('<div>').addClass('lv-info');
+    var $title = $('<div>').addClass('lv-title').text(item.title);
+    var $desc = $('<div>').addClass('lv-desc').text(item.description);
+
+    $info.append($title, $desc);
+    $card.append($thumb, $info);
+
+    var clickHandler = function () {
+      var mk = arr_markers[index];
+      if (!mk) return;
+      map.panTo(mk.getPosition());
+      if (map.getZoom() < 15) map.setZoom(15);
+      infowindow_restaurant.setContent(build_restaurant_info_content(item));
+      infowindow_restaurant.open({ anchor: mk, map });
+      var offcanvas = bootstrap.Offcanvas.getInstance(document.getElementById('list-view-panel'));
+      if (offcanvas && window.innerWidth < 768) offcanvas.hide();
+    };
+
+    $card.click(clickHandler).keydown(function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clickHandler(); }
+    });
+
+    $body.append($card);
+  });
+}
+
+function clear_list_view() {
+  arr_list_data = [];
+  render_list_view([]);
 }
 
 function initialize() {
@@ -522,6 +593,9 @@ function init_other() {
 
   set_default();
 
+  // Show empty state for list view on startup
+  render_list_view([]);
+
   $('#md-notice').on('hidden.bs.modal', function (e) {
     create_restaurant_markers();
   });
@@ -606,12 +680,14 @@ function create_restaurant_markers() {
   if (!Array.isArray(arr_restaurants) || arr_restaurants.length === 0)
     return;
 
+  var listData = [];
+
   arr_markers = arr_restaurants.reduce((markers, restaurant) => {
     var markerData = get_restaurant_marker_data(restaurant);
     if (!markerData) return markers;
 
     var r_marker = new google.maps.Marker({
-      map, position: { lat: markerData.lat, lng: markerData.lng },
+      position: { lat: markerData.lat, lng: markerData.lng },
       title: markerData.title,
       animation: google.maps.Animation.DROP,
       icon: {
@@ -626,8 +702,31 @@ function create_restaurant_markers() {
     });
 
     markers.push(r_marker);
+    listData.push(markerData);
     return markers;
   }, []);
+
+  arr_list_data = listData;
+
+  // Preload all photos then render list view with resolved URLs
+  Promise.all(listData.map(function (item) {
+    return preload_image(item.photo).then(function (resolvedUrl) {
+      item.photo = resolvedUrl;
+      return item;
+    });
+  })).then(function (resolvedList) {
+    render_list_view(resolvedList);
+  });
+
+  // Use MarkerClusterer if available, otherwise fall back to plain markers
+  if (window.markerClusterer && window.markerClusterer.MarkerClusterer) {
+    clusterer = new window.markerClusterer.MarkerClusterer({
+      map,
+      markers: arr_markers
+    });
+  } else {
+    arr_markers.forEach(function (mk) { mk.setMap(map); });
+  }
 
   arr_restaurants = [];
 };
@@ -645,6 +744,10 @@ function set_accessibility(enabled) {
 
 function clear_markers() {
   infowindow_restaurant.close();
+  if (clusterer) {
+    clusterer.clearMarkers();
+    clusterer = null;
+  }
   if (Array.isArray(arr_markers) && arr_markers.length > 0) {
     arr_markers.map((mk) => {
       google.maps.event.clearInstanceListeners(mk);
@@ -652,6 +755,7 @@ function clear_markers() {
     });
     arr_markers = [];
   }
+  clear_list_view();
 };
 
 function get_query_params() {

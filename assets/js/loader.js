@@ -84,7 +84,7 @@
   };
 
   async function loadAndRenderParts() {
-    const arr = ['loader', 'search-top', 'advanced-search', 'modal-notice'];
+    const arr = ['loader', 'search-top', 'advanced-search', 'modal-notice', 'list-view'];
     await Promise.all(arr.map(async item => {
       try {
         const element = $(`body > ${item}`);
@@ -105,6 +105,7 @@
 
     await loadScript('/assets/js/app.js');
     await loadGoogleMaps(config);
+    await loadScript('https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js');
 
     window.map_styles = [
       {

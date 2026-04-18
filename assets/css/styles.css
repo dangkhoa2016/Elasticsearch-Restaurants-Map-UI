@@ -113,3 +113,10 @@ body > svg {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.lv-distance {
+  font-size: 0.72rem;
+  color: #0d6efd;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: 6px;
+}

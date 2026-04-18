@@ -247,6 +247,50 @@ function clear_search_history() {
   render_search_history();
 }
 
+function format_distance(meters) {
+  if (meters === null || meters === undefined) return '';
+  if (meters >= 1000)
+    return (meters / 1000).toFixed(1) + ' km';
+  return Math.round(meters) + ' m';
+}
+
+function compute_item_distances(items) {
+  var origin = marker && marker.getVisible() ? marker.getPosition() : null;
+  items.forEach(function (item) {
+    if (!origin) { item._distance = null; return; }
+    var dest = new google.maps.LatLng(item.lat, item.lng);
+    item._distance = google.maps.geometry.spherical.computeDistanceBetween(origin, dest);
+  });
+}
+
+function sort_list_items(items, sortKey) {
+  var sorted = items.slice();
+  switch (sortKey) {
+    case 'name':
+      sorted.sort(function (a, b) { return a.title.localeCompare(b.title); });
+      break;
+    case 'name-desc':
+      sorted.sort(function (a, b) { return b.title.localeCompare(a.title); });
+      break;
+    case 'distance-desc':
+      sorted.sort(function (a, b) {
+        if (a._distance === null) return 1;
+        if (b._distance === null) return -1;
+        return b._distance - a._distance;
+      });
+      break;
+    case 'distance':
+    default:
+      sorted.sort(function (a, b) {
+        if (a._distance === null) return 1;
+        if (b._distance === null) return -1;
+        return a._distance - b._distance;
+      });
+      break;
+  }
+  return sorted;
+}
+
 function render_list_view(items) {
   var $body = $('#list-view-items');
   var $empty = $('#list-view-empty');
@@ -256,13 +300,24 @@ function render_list_view(items) {
   if (!items || items.length === 0) {
     $empty.show();
     $count.text('');
+    $('#list-view-sort-bar').hide();
     return;
   }
 
   $empty.hide();
   $count.text(items.length);
+  $('#list-view-sort-bar').show();
 
-  items.forEach(function (item, index) {
+  // Compute distances from current marker position
+  compute_item_distances(items);
+
+  // Apply current sort
+  var sortKey = $('#list-sort').val() || 'distance';
+  var sorted = sort_list_items(items, sortKey);
+
+  sorted.forEach(function (item) {
+    var markerIndex = arr_list_data.indexOf(item);
+
     var $card = $('<div>').addClass('lv-card').attr({
       role: 'button',
       tabindex: '0',
@@ -275,14 +330,18 @@ function render_list_view(items) {
       .on('error', function () { $(this).attr('src', fallback_restaurant_photo); });
 
     var $info = $('<div>').addClass('lv-info');
+    var $titleRow = $('<div>').addClass('d-flex justify-content-between align-items-baseline');
     var $title = $('<div>').addClass('lv-title').text(item.title);
+    var $dist = $('<span>').addClass('lv-distance')
+      .text(item._distance !== null ? format_distance(item._distance) : '');
+    $titleRow.append($title, $dist);
     var $desc = $('<div>').addClass('lv-desc').text(item.description);
 
-    $info.append($title, $desc);
+    $info.append($titleRow, $desc);
     $card.append($thumb, $info);
 
     var clickHandler = function () {
-      var mk = arr_markers[index];
+      var mk = arr_markers[markerIndex];
       if (!mk) return;
       map.panTo(mk.getPosition());
       if (map.getZoom() < 15) map.setZoom(15);
@@ -554,6 +613,11 @@ function init_other() {
   });
 
   render_search_history();
+
+  $('#list-sort').change(function () {
+    if (arr_list_data && arr_list_data.length > 0)
+      render_list_view(arr_list_data);
+  });
 
   show_help('<h3>We glad you here!</h3>');
 

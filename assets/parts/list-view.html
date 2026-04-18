@@ -7,6 +7,17 @@
     </h5>
     <button type='button' class='btn-close' data-bs-dismiss='offcanvas' aria-label='Close list view'></button>
   </div>
+  <div class='px-2 py-1 border-bottom bg-light d-flex align-items-center gap-2' id='list-view-sort-bar'>
+    <label for='list-sort' class='text-muted mb-0' style='font-size:0.78rem;white-space:nowrap'>
+      <i class='bi-sort-down' aria-hidden='true'></i> Sort:
+    </label>
+    <select id='list-sort' class='form-select form-select-sm py-0' style='font-size:0.8rem;height:26px'>
+      <option value='distance'>Distance (near first)</option>
+      <option value='distance-desc'>Distance (far first)</option>
+      <option value='name'>Name (A → Z)</option>
+      <option value='name-desc'>Name (Z → A)</option>
+    </select>
+  </div>
   <div class='offcanvas-body p-0' id='list-view-body'>
     <div id='list-view-empty' class='text-center text-muted py-5' style='display:none'>
       <i class='bi-search' style='font-size:2rem' aria-hidden='true'></i>

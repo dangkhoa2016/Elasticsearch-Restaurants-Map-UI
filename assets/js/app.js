@@ -269,6 +269,51 @@ window.ElasticsearchRestaurants = function() {
     this.render_search_history();
   };
 
+  this.format_distance = function (meters) {
+    if (meters === null || meters === undefined) return '';
+    if (meters >= 1000)
+      return (meters / 1000).toFixed(1) + ' km';
+    return Math.round(meters) + ' m';
+  };
+
+  this.compute_item_distances = function (items) {
+    var t = this;
+    var origin = t.marker && t.marker.getVisible() ? t.marker.getPosition() : null;
+    items.forEach(function (item) {
+      if (!origin) { item._distance = null; return; }
+      var dest = new google.maps.LatLng(item.lat, item.lng);
+      item._distance = google.maps.geometry.spherical.computeDistanceBetween(origin, dest);
+    });
+  };
+
+  this.sort_list_items = function (items, sortKey) {
+    var sorted = items.slice();
+    switch (sortKey) {
+      case 'name':
+        sorted.sort(function (a, b) { return a.title.localeCompare(b.title); });
+        break;
+      case 'name-desc':
+        sorted.sort(function (a, b) { return b.title.localeCompare(a.title); });
+        break;
+      case 'distance-desc':
+        sorted.sort(function (a, b) {
+          if (a._distance === null) return 1;
+          if (b._distance === null) return -1;
+          return b._distance - a._distance;
+        });
+        break;
+      case 'distance':
+      default:
+        sorted.sort(function (a, b) {
+          if (a._distance === null) return 1;
+          if (b._distance === null) return -1;
+          return a._distance - b._distance;
+        });
+        break;
+    }
+    return sorted;
+  };
+
   this.render_list_view = function (items) {
     var t = this;
     var $body = $('#list-view-items');
@@ -279,13 +324,25 @@ window.ElasticsearchRestaurants = function() {
     if (!items || items.length === 0) {
       $empty.show();
       $count.text('');
+      $('#list-view-sort-bar').hide();
       return;
     }
 
     $empty.hide();
     $count.text(items.length);
+    $('#list-view-sort-bar').show();
 
-    items.forEach(function (item, index) {
+    // Compute distances from current marker position
+    t.compute_item_distances(items);
+
+    // Apply current sort
+    var sortKey = $('#list-sort').val() || 'distance';
+    var sorted = t.sort_list_items(items, sortKey);
+
+    sorted.forEach(function (item) {
+      // Find the true index in arr_markers (match by lat/lng)
+      var markerIndex = t.arr_list_data.indexOf(item);
+
       var $card = $('<div>').addClass('lv-card').attr({
         role: 'button',
         tabindex: '0',
@@ -298,21 +355,23 @@ window.ElasticsearchRestaurants = function() {
         .on('error', function () { $(this).attr('src', t.fallback_restaurant_photo); });
 
       var $info = $('<div>').addClass('lv-info');
+      var $titleRow = $('<div>').addClass('d-flex justify-content-between align-items-baseline');
       var $title = $('<div>').addClass('lv-title').text(item.title);
+      var $dist = $('<span>').addClass('lv-distance')
+        .text(item._distance !== null ? t.format_distance(item._distance) : '');
+      $titleRow.append($title, $dist);
       var $desc = $('<div>').addClass('lv-desc').text(item.description);
 
-      $info.append($title, $desc);
+      $info.append($titleRow, $desc);
       $card.append($thumb, $info);
 
-      // Click: pan to marker and open info window
       var clickHandler = function () {
-        var mk = t.arr_markers[index];
+        var mk = t.arr_markers[markerIndex];
         if (!mk) return;
         t.map.panTo(mk.getPosition());
         if (t.map.getZoom() < 15) t.map.setZoom(15);
         t.infowindow_restaurant.setContent(t.build_restaurant_info_content(item));
         t.infowindow_restaurant.open({ anchor: mk, map: t.map });
-        // Close offcanvas on mobile after clicking
         var offcanvas = bootstrap.Offcanvas.getInstance(document.getElementById('list-view-panel'));
         if (offcanvas && window.innerWidth < 768) offcanvas.hide();
       };
@@ -577,6 +636,11 @@ window.ElasticsearchRestaurants = function() {
     });
 
     t.render_search_history();
+
+    $('#list-sort').change(function () {
+      if (t.arr_list_data && t.arr_list_data.length > 0)
+        t.render_list_view(t.arr_list_data);
+    });
 
     $('#btn-reset').click(function (e) {
       e.preventDefault();

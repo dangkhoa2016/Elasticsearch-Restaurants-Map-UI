@@ -122,6 +122,22 @@ body > svg {
   margin-left: 6px;
 }
 
+/* Filter highlight */
+mark.lv-highlight {
+  background-color: #fff3cd;
+  color: inherit;
+  padding: 0;
+  border-radius: 2px;
+  font-weight: 600;
+}
+
+/* Filter count badge next to input */
+#list-filter-count {
+  font-size: 0.72rem;
+  color: #6c757d;
+  white-space: nowrap;
+}
+
 /* Favorites star button */
 .lv-fav-btn {
   background: none;

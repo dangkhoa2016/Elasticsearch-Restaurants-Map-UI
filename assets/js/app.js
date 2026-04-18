@@ -464,23 +464,45 @@ window.ElasticsearchRestaurants = function() {
     if (!items || items.length === 0) {
       $empty.show();
       $count.text('');
-      $('#list-view-sort-bar').hide();
+      $('#list-view-toolbar').hide();
+      $('#list-filter').val('');
+      $('#list-filter-count').text('');
       return;
     }
 
-    $empty.hide();
-    $count.text(items.length);
-    $('#list-view-sort-bar').show();
+    $('#list-view-toolbar').show();
 
     // Compute distances from current marker position
     t.compute_item_distances(items);
 
+    // Apply text filter
+    var filterText = ($('#list-filter').val() || '').trim().toLowerCase();
+    var filtered = filterText
+      ? items.filter(function (item) {
+          return item.title.toLowerCase().indexOf(filterText) >= 0 ||
+                 item.description.toLowerCase().indexOf(filterText) >= 0;
+        })
+      : items;
+
+    // Update count badges
+    $count.text(items.length);
+    if (filterText) {
+      $('#list-filter-count').text(filtered.length + '/' + items.length);
+    } else {
+      $('#list-filter-count').text('');
+    }
+
+    if (filtered.length === 0) {
+      $empty.text('No results match "' + filterText + '"').show();
+      return;
+    }
+    $empty.hide();
+
     // Apply current sort
     var sortKey = $('#list-sort').val() || 'distance';
-    var sorted = t.sort_list_items(items, sortKey);
+    var sorted = t.sort_list_items(filtered, sortKey);
 
     sorted.forEach(function (item) {
-      // Find the true index in arr_markers (match by lat/lng)
       var markerIndex = t.arr_list_data.indexOf(item);
 
       var $card = $('<div>').addClass('lv-card').attr({
@@ -496,11 +518,21 @@ window.ElasticsearchRestaurants = function() {
 
       var $info = $('<div>').addClass('lv-info');
       var $titleRow = $('<div>').addClass('d-flex justify-content-between align-items-baseline');
-      var $title = $('<div>').addClass('lv-title').text(item.title);
+      var $title = $('<div>').addClass('lv-title');
+      if (filterText) {
+        $title.html(t.highlight_text(item.title, filterText));
+      } else {
+        $title.text(item.title);
+      }
       var $dist = $('<span>').addClass('lv-distance')
         .text(item._distance !== null ? t.format_distance(item._distance) : '');
       $titleRow.append($title, $dist);
-      var $desc = $('<div>').addClass('lv-desc').text(item.description);
+      var $desc = $('<div>').addClass('lv-desc');
+      if (filterText) {
+        $desc.html(t.highlight_text(item.description, filterText));
+      } else {
+        $desc.text(item.description);
+      }
 
       var isFav = t.is_favorite(item.id);
       var $favBtn = $('<button>').addClass('lv-fav-btn' + (isFav ? ' is-fav' : ''))
@@ -530,6 +562,13 @@ window.ElasticsearchRestaurants = function() {
 
       $body.append($card);
     });
+  };
+
+  this.highlight_text = function (text, query) {
+    if (!query) return this.escape_html(text);
+    var safe = this.escape_html(text);
+    var safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return safe.replace(new RegExp('(' + safeQuery + ')', 'gi'), '<mark class="lv-highlight">$1</mark>');
   };
 
   this.clear_list_view = function () {
@@ -825,6 +864,12 @@ window.ElasticsearchRestaurants = function() {
       if (t.arr_list_data && t.arr_list_data.length > 0)
         t.render_list_view(t.arr_list_data);
     });
+
+    var filterDebounce = t.debounce(function () {
+      if (t.arr_list_data && t.arr_list_data.length > 0)
+        t.render_list_view(t.arr_list_data);
+    }, 200);
+    $('#list-filter').on('input search', filterDebounce);
 
     $('#btn-reset').click(function (e) {
       e.preventDefault();

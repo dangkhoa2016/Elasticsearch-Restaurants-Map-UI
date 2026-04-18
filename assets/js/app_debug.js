@@ -428,6 +428,13 @@ function sort_list_items(items, sortKey) {
   return sorted;
 }
 
+function highlight_text(text, query) {
+  if (!query) return escape_html(text);
+  var safe = escape_html(text);
+  var safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return safe.replace(new RegExp('(' + safeQuery + ')', 'gi'), '<mark class="lv-highlight">$1</mark>');
+}
+
 function render_list_view(items) {
   var $body = $('#list-view-items');
   var $empty = $('#list-view-empty');
@@ -437,20 +444,43 @@ function render_list_view(items) {
   if (!items || items.length === 0) {
     $empty.show();
     $count.text('');
-    $('#list-view-sort-bar').hide();
+    $('#list-view-toolbar').hide();
+    $('#list-filter').val('');
+    $('#list-filter-count').text('');
     return;
   }
 
-  $empty.hide();
-  $count.text(items.length);
-  $('#list-view-sort-bar').show();
+  $('#list-view-toolbar').show();
 
   // Compute distances from current marker position
   compute_item_distances(items);
 
+  // Apply text filter
+  var filterText = ($('#list-filter').val() || '').trim().toLowerCase();
+  var filtered = filterText
+    ? items.filter(function (item) {
+        return item.title.toLowerCase().indexOf(filterText) >= 0 ||
+               item.description.toLowerCase().indexOf(filterText) >= 0;
+      })
+    : items;
+
+  // Update count badges
+  $count.text(items.length);
+  if (filterText) {
+    $('#list-filter-count').text(filtered.length + '/' + items.length);
+  } else {
+    $('#list-filter-count').text('');
+  }
+
+  if (filtered.length === 0) {
+    $empty.text('No results match "' + filterText + '"').show();
+    return;
+  }
+  $empty.hide();
+
   // Apply current sort
   var sortKey = $('#list-sort').val() || 'distance';
-  var sorted = sort_list_items(items, sortKey);
+  var sorted = sort_list_items(filtered, sortKey);
 
   sorted.forEach(function (item) {
     var markerIndex = arr_list_data.indexOf(item);
@@ -468,11 +498,21 @@ function render_list_view(items) {
 
     var $info = $('<div>').addClass('lv-info');
     var $titleRow = $('<div>').addClass('d-flex justify-content-between align-items-baseline');
-    var $title = $('<div>').addClass('lv-title').text(item.title);
+    var $title = $('<div>').addClass('lv-title');
+    if (filterText) {
+      $title.html(highlight_text(item.title, filterText));
+    } else {
+      $title.text(item.title);
+    }
     var $dist = $('<span>').addClass('lv-distance')
       .text(item._distance !== null ? format_distance(item._distance) : '');
     $titleRow.append($title, $dist);
-    var $desc = $('<div>').addClass('lv-desc').text(item.description);
+    var $desc = $('<div>').addClass('lv-desc');
+    if (filterText) {
+      $desc.html(highlight_text(item.description, filterText));
+    } else {
+      $desc.text(item.description);
+    }
 
     var isFav = is_favorite(item.id);
     var $favBtn = $('<button>').addClass('lv-fav-btn' + (isFav ? ' is-fav' : ''))
@@ -795,6 +835,12 @@ function init_other() {
     if (arr_list_data && arr_list_data.length > 0)
       render_list_view(arr_list_data);
   });
+
+  var filterDebounce = debounce(function () {
+    if (arr_list_data && arr_list_data.length > 0)
+      render_list_view(arr_list_data);
+  }, 200);
+  $('#list-filter').on('input search', filterDebounce);
 
   show_help('<h3>We glad you here!</h3>');
 

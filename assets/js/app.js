@@ -576,6 +576,116 @@ window.ElasticsearchRestaurants = function() {
     this.render_list_view([]);
   };
 
+  // ── Share / Deep Link ────────────────────────────────────────────────────
+
+  this.get_url_state = function () {
+    var t = this;
+    if (!t.marker || !t.marker.getVisible()) return null;
+    var pos = t.marker.getPosition();
+    var params = new URLSearchParams();
+    params.set('lat', pos.lat().toFixed(6));
+    params.set('lng', pos.lng().toFixed(6));
+    params.set('addr', $('#txt-address').val() || '');
+    var isCircle = t.is_circle();
+    params.set('type', isCircle ? 'circle' : 'rectangle');
+    if (isCircle) {
+      params.set('d', t.get_distance());
+      params.set('du', t.get_dropdown_measure('#grp-distance'));
+    } else {
+      params.set('h', t.get_horizontal());
+      params.set('hu', t.get_dropdown_measure('#grp-horizontal'));
+      params.set('v', t.get_vertical());
+      params.set('vu', t.get_dropdown_measure('#grp-vertical'));
+    }
+    return params;
+  };
+
+  this.apply_url_state = function () {
+    var t = this;
+    var hash = window.location.hash;
+    if (!hash || hash.length <= 1) return;
+    try {
+      var params = new URLSearchParams(hash.slice(1));
+      var lat = parseFloat(params.get('lat'));
+      var lng = parseFloat(params.get('lng'));
+      if (!t.is_latitude(lat) || !t.is_longitude(lng)) return;
+
+      var type = params.get('type') === 'rectangle' ? 'rectangle' : 'circle';
+      var d = params.get('d');
+      var du = params.get('du') || 'm';
+      var h = params.get('h');
+      var hu = params.get('hu') || 'm';
+      var v = params.get('v');
+      var vu = params.get('vu') || 'm';
+      var addr = params.get('addr') || '';
+
+      // 1. Restore shape type
+      (t.$sel_enlarge_type || $('#sel-enlarge-type')).val(type).trigger('change');
+
+      // 2. Restore units FIRST so the max-cap check in handle_change_measure
+      //    runs against the existing default, not the URL value.
+      t.handle_change_measure('#grp-distance .dropdown-menu li a[data-value="' + du + '"]', false);
+      t.handle_change_measure('#grp-horizontal .dropdown-menu li a[data-value="' + hu + '"]', false);
+      t.handle_change_measure('#grp-vertical .dropdown-menu li a[data-value="' + vu + '"]', false);
+
+      // 3. Restore distance values AFTER units are set (overwrites any clipped default).
+      if (d !== null) (t.$txt_distance || $('#txt-distance')).val(d);
+      if (h !== null) (t.$txt_horizontal || $('#txt-horizontal')).val(h);
+      if (v !== null) (t.$txt_vertical || $('#txt-vertical')).val(v);
+
+      // 4. Restore center point: set txt-point and call set_point
+      var latLng = new google.maps.LatLng(lat, lng);
+      t.txt_point.val(latLng.toUrlValue());
+      t.set_point(t.txt_point);
+
+      // 5. After positioning marker, ensure circle has correct radius
+      t.redraw_from_distance();
+
+      // 6. Set address input text
+      if (addr) $('#txt-address').val(addr);
+    } catch (e) { /* noop — malformed hash */ }
+  };
+
+  this.share_search = function () {
+    var t = this;
+    var params = t.get_url_state();
+    if (!params) {
+      t.show_text_message('Nothing to share', 'Please set a search location first.');
+      return;
+    }
+    var url = window.location.origin + window.location.pathname + '#' + params.toString();
+    // Update current hash so the URL bar reflects the state
+    history.replaceState(null, '', '#' + params.toString());
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url)
+        .then(function () { t.show_share_feedback(true); })
+        .catch(function () { t.fallback_copy(url); });
+    } else {
+      t.fallback_copy(url);
+    }
+  };
+
+  this.fallback_copy = function (text) {
+    var t = this;
+    var $ta = $('<textarea>').val(text).css({ position: 'fixed', top: 0, left: 0, opacity: 0 }).appendTo('body');
+    $ta[0].select();
+    try { document.execCommand('copy'); t.show_share_feedback(true); } catch (e) { t.show_share_feedback(false); }
+    $ta.remove();
+  };
+
+  this.show_share_feedback = function (success) {
+    var $btn = $('#btn-share');
+    var $icon = $btn.find('i');
+    $icon.removeClass('bi-share-fill').addClass(success ? 'bi-check2-circle' : 'bi-x-circle');
+    $btn.addClass(success ? 'text-info' : 'text-danger');
+    setTimeout(function () {
+      $icon.removeClass('bi-check2-circle bi-x-circle').addClass('bi-share-fill');
+      $btn.removeClass('text-info text-danger');
+    }, 2000);
+  };
+
+  // ────────────────────────────────────────────────────────────────────────
+
   this.initialize = function () {
     var t = this;
 
@@ -975,6 +1085,15 @@ window.ElasticsearchRestaurants = function() {
 
     // Show empty state for list view on startup
     t.render_list_view([]);
+
+    // Share button
+    $('#btn-share').click(function (e) {
+      e.preventDefault();
+      t.share_search();
+    });
+
+    // Restore state from URL hash if present
+    t.apply_url_state();
 
   };
 

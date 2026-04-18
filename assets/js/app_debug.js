@@ -549,6 +549,111 @@ function clear_list_view() {
   render_list_view([]);
 }
 
+// ── Share / Deep Link ────────────────────────────────────────────────────
+
+function get_url_state() {
+  if (!marker || !marker.getVisible()) return null;
+  var pos = marker.getPosition();
+  var params = new URLSearchParams();
+  params.set('lat', pos.lat().toFixed(6));
+  params.set('lng', pos.lng().toFixed(6));
+  params.set('addr', $('#txt-address').val() || '');
+  var isCircle = is_circle();
+  params.set('type', isCircle ? 'circle' : 'rectangle');
+  if (isCircle) {
+    params.set('d', get_distance());
+    params.set('du', get_dropdown_measure('#grp-distance'));
+  } else {
+    params.set('h', get_horizontal());
+    params.set('hu', get_dropdown_measure('#grp-horizontal'));
+    params.set('v', get_vertical());
+    params.set('vu', get_dropdown_measure('#grp-vertical'));
+  }
+  return params;
+}
+
+function apply_url_state() {
+  var hash = window.location.hash;
+  if (!hash || hash.length <= 1) return;
+  try {
+    var params = new URLSearchParams(hash.slice(1));
+    var lat = parseFloat(params.get('lat'));
+    var lng = parseFloat(params.get('lng'));
+    if (!is_latitude(lat) || !is_longitude(lng)) return;
+
+    var type = params.get('type') === 'rectangle' ? 'rectangle' : 'circle';
+    var d = params.get('d');
+    var du = params.get('du') || 'm';
+    var h = params.get('h');
+    var hu = params.get('hu') || 'm';
+    var v = params.get('v');
+    var vu = params.get('vu') || 'm';
+    var addr = params.get('addr') || '';
+
+    // 1. Restore shape type
+    ($sel_enlarge_type || $('#sel-enlarge-type')).val(type).trigger('change');
+
+    // 2. Restore units FIRST so the max-cap check in handle_change_measure
+    //    runs against the existing default, not the URL value.
+    handle_change_measure('#grp-distance .dropdown-menu li a[data-value="' + du + '"]', false);
+    handle_change_measure('#grp-horizontal .dropdown-menu li a[data-value="' + hu + '"]', false);
+    handle_change_measure('#grp-vertical .dropdown-menu li a[data-value="' + vu + '"]', false);
+
+    // 3. Restore distance values AFTER units are set (overwrites any clipped default).
+    if (d !== null) ($txt_distance || $('#txt-distance')).val(d);
+    if (h !== null) ($txt_horizontal || $('#txt-horizontal')).val(h);
+    if (v !== null) ($txt_vertical || $('#txt-vertical')).val(v);
+
+    // 4. Restore center point
+    var latLng = new google.maps.LatLng(lat, lng);
+    txt_point.val(latLng.toUrlValue());
+    set_point(txt_point);
+
+    // 5. Ensure circle has correct radius
+    redraw_from_distance();
+
+    // 6. Set address text
+    if (addr) $('#txt-address').val(addr);
+  } catch (e) { /* noop — malformed hash */ }
+}
+
+function share_search() {
+  var params = get_url_state();
+  if (!params) {
+    show_text_message('Nothing to share', 'Please set a search location first.');
+    return;
+  }
+  var url = window.location.origin + window.location.pathname + '#' + params.toString();
+  history.replaceState(null, '', '#' + params.toString());
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url)
+      .then(function () { show_share_feedback(true); })
+      .catch(function () { fallback_copy(url); });
+  } else {
+    fallback_copy(url);
+  }
+}
+
+function fallback_copy(text) {
+  var $ta = $('<textarea>').val(text).css({ position: 'fixed', top: 0, left: 0, opacity: 0 }).appendTo('body');
+  $ta[0].select();
+  try { document.execCommand('copy'); show_share_feedback(true); } catch (e) { show_share_feedback(false); }
+  $ta.remove();
+}
+
+function show_share_feedback(success) {
+  var $btn = $('#btn-share');
+  var $icon = $btn.find('i');
+  $icon.removeClass('bi-share-fill').addClass(success ? 'bi-check2-circle' : 'bi-x-circle');
+  $btn.addClass(success ? 'text-info' : 'text-danger');
+  setTimeout(function () {
+    $icon.removeClass('bi-check2-circle bi-x-circle').addClass('bi-share-fill');
+    $btn.removeClass('text-info text-danger');
+  }, 2000);
+}
+
+// ────────────────────────────────────────────────────────────────────────
+
 function initialize() {
   center = new google.maps.LatLng(map_center[0], map_center[1]);
 
@@ -882,6 +987,15 @@ function init_other() {
 
   // Show empty state for list view on startup
   render_list_view([]);
+
+  // Share button
+  $('#btn-share').click(function (e) {
+    e.preventDefault();
+    share_search();
+  });
+
+  // Restore state from URL hash if present
+  apply_url_state();
 
   $('#md-notice').on('hidden.bs.modal', function (e) {
     create_restaurant_markers();

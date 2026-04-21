@@ -173,7 +173,7 @@ function get_restaurant_marker_data(restaurant) {
     lat,
     lng,
     title: escape_html(source.name || 'Restaurant'),
-    description: escape_html(source.description || 'No description available.'),
+    description: escape_html(source.description || 'No description available.').replace(/&lt;br\s*\/?&gt;/gi, '<br>'),
     photo: sanitize_url(get_photo(source.photos), fallback_restaurant_photo)
   };
 }
@@ -325,8 +325,8 @@ function render_favorites_tab() {
       .on('error', function () { $(this).attr('src', fallback_restaurant_photo); });
     var $info = $('<div>').addClass('lv-info');
     var $titleRow = $('<div>').addClass('d-flex justify-content-between');
-    var $title = $('<div>').addClass('lv-title').text(fav.title);
-    var $desc = $('<div>').addClass('lv-desc').text(fav.description);
+    var $title = $('<div>').addClass('lv-title').html(fav.title);
+    var $desc = $('<div>').addClass('lv-desc').html(fav.description);
     $titleRow.append($title);
     $info.append($titleRow, $desc);
     var $favBtn = $('<button>').addClass('lv-fav-btn is-fav')
@@ -429,10 +429,9 @@ function sort_list_items(items, sortKey) {
 }
 
 function highlight_text(text, query) {
-  if (!query) return escape_html(text);
-  var safe = escape_html(text);
-  var safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return safe.replace(new RegExp('(' + safeQuery + ')', 'gi'), '<mark class="lv-highlight">$1</mark>');
+  if (!query) return text;
+  var safeQuery = escape_html(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp('(' + safeQuery + ')', 'gi'), '<mark class="lv-highlight">$1</mark>');
 }
 
 function render_list_view(items) {
@@ -502,7 +501,7 @@ function render_list_view(items) {
     if (filterText) {
       $title.html(highlight_text(item.title, filterText));
     } else {
-      $title.text(item.title);
+      $title.html(item.title);
     }
     var $dist = $('<span>').addClass('lv-distance')
       .text(item._distance !== null ? format_distance(item._distance) : '');
@@ -511,7 +510,7 @@ function render_list_view(items) {
     if (filterText) {
       $desc.html(highlight_text(item.description, filterText));
     } else {
-      $desc.text(item.description);
+      $desc.html(item.description);
     }
 
     var isFav = is_favorite(item.id);

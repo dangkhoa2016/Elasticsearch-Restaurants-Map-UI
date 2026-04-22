@@ -121,6 +121,15 @@ Repository đi kèm file cấu hình `.replit`. Hãy import repo vào [Replit](h
 
 ---
 
+## Tài liệu demo
+
+Để xem hướng dẫn demo có kèm ảnh chụp màn hình, xem tại:
+
+- [demo.md](demo.md) — English
+- [demo.vi.md](demo.vi.md) — Tiếng Việt
+
+---
+
 ## Địa điểm Demo / Test
 
 Hai trang hỗ trợ được đính kèm để giúp bạn nhanh chóng tìm các khu vực có nhiều nhà hàng demo khi test:

@@ -121,6 +121,15 @@ The repository includes a `.replit` configuration file. Import the repo into [Re
 
 ---
 
+## Demo Guide
+
+For a visual walkthrough with screenshots, see:
+
+- [demo.md](demo.md) — English
+- [demo.vi.md](demo.vi.md) — Tiếng Việt
+
+---
+
 ## Demo / Test Locations
 
 Two helper pages are included to help you quickly find areas with many demo restaurants during testing:

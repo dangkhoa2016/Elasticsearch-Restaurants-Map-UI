@@ -1,0 +1,159 @@
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Google Maps Reverse Geocoding List</title>
+
+    <style>
+      body {
+        font-family: sans-serif;
+        line-height: 1.6;
+        padding: 20px;
+        background: #f4f4f9;
+      }
+      h2 {
+        color: #333;
+      }
+      ul {
+        list-style: none;
+        padding: 0;
+      }
+      li {
+        background: #fff;
+        margin-bottom: 10px;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        border-left: 5px solid #ccc;
+      }
+      .loading {
+        color: #999;
+        font-style: italic;
+      }
+      .address {
+        color: #2c3e50;
+        font-weight: bold;
+        cursor: pointer;
+      }
+      .key {
+        font-size: 0.8em;
+        color: #666;
+        display: block;
+        margin-bottom: 10px;
+        margin-top: 10px;
+      }
+      .key:first-child {
+        margin-top: 0 !important;
+      }
+      .key.location {
+        color: #2980b9;
+        cursor: pointer;
+      }
+      .key.location:hover {
+        text-decoration: underline;
+      }
+      .success {
+        border-left-color: #4caf50;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>List of Addresses from Coordinates</h2>
+    <a href="top_location_with_many_restaurants_for_test.vi.html">View in Vietnamese</a>
+    <p><a href="reverse_geocoding_list.html">Click here</a> to decode the geocoding list from Google Maps, using the Google Maps Geocoding API</p>
+
+    <ul id="location-list">
+      <li id="item-r1r0f" class="success">
+        <span class="key">Area Code: r1r0f</span>
+        <span class="key location" title="Original coordinates, click to copy">Lat: -37.81610180227915, Lon: 144.9616378878904</span>
+        <div id="addr-r1r0f" class="address" title="Original address from API, click to copy">
+          Level 18, Queen &amp; Collins Building, 376 - 390 Collins St,
+          Melbourne VIC 3000, Australia
+        </div>
+      </li>
+      <li id="item-r3gx2" class="success">
+        <span class="key">Area Code: r3gx2</span>
+        <span class="key location" title="Original coordinates, click to copy">Lat: -33.86736619033162, Lon: 151.20428711621335</span>
+        <div id="addr-r3gx2" class="address" title="Original address from API, click to copy">
+          Level 17/309 Kent St, Sydney NSW 2000, Australia
+        </div>
+      </li>
+      <li id="item-r1r0g" class="success">
+        <span class="key">Area Code: r1r0g</span>
+        <span class="key location" title="Original coordinates, click to copy">Lat: -37.81191290108836, Lon: 144.9908443383174</span>
+        <div id="addr-r1r0g" class="address" title="Original address from API, click to copy">
+          1227 Hoddle St, East Melbourne VIC 3002, Australia
+        </div>
+      </li>
+      <li id="item-r1r0e" class="success">
+        <span class="key">Area Code: r1r0e</span>
+        <span class="key location" title="Original coordinates, click to copy">Lat: -37.85249049159428, Lon: 144.99338839143033</span>
+        <div id="addr-r1r0e" class="address" title="Original address from API, click to copy">
+          166 Chapel St, Windsor VIC 3181, Australia
+        </div>
+      </li>
+      <li id="item-r3gx0" class="success">
+        <span class="key">Area Code: r3gx0</span>
+        <span class="key location" title="Original coordinates, click to copy">Lat: -33.89462289785774, Lon: 151.19509453804972</span>
+        <div id="addr-r3gx0" class="address" title="Original address from API, click to copy">
+          Suite 44, Bay 5-7 North/2 Locomotive St, Eveleigh NSW 2015, Australia
+        </div>
+      </li>
+      <li id="item-r7hgd" class="success">
+        <span class="key">Area Code: r7hgd</span>
+        <span class="key location" title="Original coordinates, click to copy">Lat: -27.475895955543614, Lon: 153.02839119127898</span>
+        <div id="addr-r7hgd" class="address" title="Original address from API, click to copy">
+          QUT A Block, Brisbane City QLD 4000, Australia
+        </div>
+      </li>
+      <li id="item-r7hgf" class="success">
+        <span class="key">Area Code: r7hgf</span>
+        <span class="key location" title="Original coordinates, click to copy">Lat: -27.454404826656138, Lon: 153.03771918316428</span>
+        <div id="addr-r7hgf" class="address" title="Original address from API, click to copy">
+          14A Church St, Fortitude Valley QLD 4006, Australia
+        </div>
+      </li>
+      <li id="item-r7j0e" class="success">
+        <span class="key">Area Code: r7j0e</span>
+        <span class="key location" title="Original coordinates, click to copy">Lat: -28.0152605955587, Lon: 153.42902799529074</span>
+        <div id="addr-r7j0e" class="address" title="Original address from API, click to copy">
+          2859 Gold Coast Hwy, Surfers Paradise QLD 4217, Australia
+        </div>
+      </li>
+      <li id="item-r1r15" class="success">
+        <span class="key">Area Code: r1r15</span>
+        <span class="key location" title="Original coordinates, click to copy">Lat: -37.773700944063336, Lon: 144.99372796748173</span>
+        <div id="addr-r1r15" class="address" title="Original address from API, click to copy">
+          89 Westbourne Grove, Northcote VIC 3070, Australia
+        </div>
+      </li>
+      <li id="item-r3dp3" class="success">
+        <span class="key">Area Code: r3dp3</span>
+        <span class="key location" title="Original coordinates, click to copy">Lat: -35.27715396312676, Lon: 149.1304916140206</span>
+        <div id="addr-r3dp3" class="address" title="Original address from API, click to copy">
+          Veterans Park, 68 Northbourne Ave, Canberra ACT 2601, Australia
+        </div>
+      </li>
+    </ul>
+  </body>
+
+  <script>
+    const list = document.getElementById("location-list");
+    list.querySelectorAll("li").forEach((li) => {
+      const location_info = li.querySelector(".key.location");
+      location_info.addEventListener("click", () => {
+        const coordsText = location_info.innerText.replace("Lat: ", "").replace("Lon: ", "");
+        navigator.clipboard.writeText(coordsText).then(() => {
+          alert(`Copied coordinates: ${coordsText}`);
+        });
+      });
+
+      const addrDiv = li.querySelector(".address");
+      addrDiv.addEventListener("click", () => {
+        const addrText = addrDiv.innerText;
+        navigator.clipboard.writeText(addrText).then(() => {
+          alert(`Copied address: ${addrText}`);
+        });
+      });
+    });
+  </script>
+</html>

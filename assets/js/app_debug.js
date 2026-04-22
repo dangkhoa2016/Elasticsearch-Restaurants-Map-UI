@@ -55,6 +55,7 @@ var content_template = `<div class="iw-main">
 var help_text = `
   <p>Please enter your address on the textbox to search restaurants near you or click on the map to manual choose, you can drag the marker to specify.</p>
   <p>You can also use advanced filter by clicking the <span class="badge bg-secondary">Advanced</span> button.</p>
+  <p>For testing, you can use pre-selected locations that have many demo restaurants. <a href="top_location_with_many_restaurants_for_test.html" target="_blank">Click here</a> to view the list of demo locations.</p>
   <p>Happy searching...</p>
 `;
 var arr_markers = [];

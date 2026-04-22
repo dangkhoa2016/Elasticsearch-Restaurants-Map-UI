@@ -1,0 +1,201 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Reverse Geocoding List using Google Maps Geocoding API</title>
+
+    <style>
+      body {
+        font-family: sans-serif;
+        line-height: 1.6;
+        padding: 20px;
+        background: #f4f4f9;
+      }
+      h2 {
+        color: #333;
+      }
+      ul {
+        list-style: none;
+        padding: 0;
+      }
+      li {
+        background: #fff;
+        margin-bottom: 10px;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        border-left: 5px solid #ccc;
+      }
+      .loading {
+        color: #999;
+        font-style: italic;
+      }
+      .address {
+        color: #2c3e50;
+        font-weight: bold;
+        cursor: pointer;
+      }
+      .key {
+        font-size: 0.8em;
+        color: #666;
+        display: block;
+        margin-bottom: 10px;
+        margin-top: 10px;
+      }
+      .key:first-child {
+        margin-top: 0 !important;
+      }
+      .key.location {
+        color: #2980b9;
+        cursor: pointer;
+      }
+      .key.location:hover {
+        text-decoration: underline;
+      }
+      .success {
+        border-left-color: #4caf50;
+      }
+    </style>
+
+    <script src="https://maps.googleapis.com/maps/api/js?key=[your API key]"></script>
+
+    <script>
+      const data = [
+        {
+          key: "r1r0f",
+          center_point: {
+            location: { lat: -37.81610180227915, lon: 144.9616378878904 },
+          },
+        },
+        {
+          key: "r3gx2",
+          center_point: {
+            location: { lat: -33.86736619033162, lon: 151.20428711621335 },
+          },
+        },
+        {
+          key: "r1r0g",
+          center_point: {
+            location: { lat: -37.81191290108836, lon: 144.9908443383174 },
+          },
+        },
+        {
+          key: "r1r0e",
+          center_point: {
+            location: { lat: -37.85249049159428, lon: 144.99338839143033 },
+          },
+        },
+        {
+          key: "r3gx0",
+          center_point: {
+            location: { lat: -33.89462289785774, lon: 151.19509453804972 },
+          },
+        },
+        {
+          key: "r7hgd",
+          center_point: {
+            location: { lat: -27.475895955543614, lon: 153.02839119127898 },
+          },
+        },
+        {
+          key: "r7hgf",
+          center_point: {
+            location: { lat: -27.454404826656138, lon: 153.03771918316428 },
+          },
+        },
+        {
+          key: "r7j0e",
+          center_point: {
+            location: { lat: -28.0152605955587, lon: 153.42902799529074 },
+          },
+        },
+        {
+          key: "r1r15",
+          center_point: {
+            location: { lat: -37.773700944063336, lon: 144.99372796748173 },
+          },
+        },
+        {
+          key: "r3dp3",
+          center_point: {
+            location: { lat: -35.27715396312676, lon: 149.1304916140206 },
+          },
+        },
+      ];
+    </script>
+
+    <script>
+      async function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+      }
+
+      async function fetchAddresses() {
+        const listContainer = document.getElementById("location-list");
+        const geocoder = new google.maps.Geocoder();
+
+        // 1. Initialize the list with a loading state
+        data.forEach((item) => {
+          const li = document.createElement("li");
+          li.id = `item-${item.key}`;
+          li.innerHTML = `
+            <span class="key">Region Code: ${item.key}</span>
+            <span class="key location" title="Original coordinates, click to copy">Lat: ${item.center_point.location.lat}, Lon: ${item.center_point.location.lon}</span>
+            <div id="addr-${item.key}" class="loading" title="Original address from API, click to copy">Fetching address...</div>
+          `;
+          listContainer.appendChild(li);
+          li.querySelector(".key.location").addEventListener("click", () => {
+            const coordsText = `${item.center_point.location.lat}, ${item.center_point.location.lon}`;
+            navigator.clipboard.writeText(coordsText).then(() => {
+              alert(`Copied coordinates: ${coordsText}`);
+            });
+          });
+
+          li.querySelector(`#addr-${item.key}`).addEventListener("click", () => {
+            const addrText = li.querySelector(`#addr-${item.key}`).innerText;
+            if (addrText && !addrText.includes("Fetching address") && !addrText.includes("Error")) {
+              navigator.clipboard.writeText(addrText).then(() => {
+                alert(`Copied address: ${addrText}`);
+              });
+            }
+          });
+        });
+
+        // 2. Loop through each coordinate to fetch and update the UI
+        for (const item of data) {
+          const coords = item.center_point.location;
+          const latlng = { lat: coords.lat, lng: coords.lon };
+          const addrDiv = document.getElementById(`addr-${item.key}`);
+          const liElement = document.getElementById(`item-${item.key}`);
+
+          try {
+            const response = await geocoder.geocode({ location: latlng });
+            console.log("results", response.results);
+            if (response.results[0]) {
+              const address = response.results[0].formatted_address;
+              addrDiv.innerText = address;
+              addrDiv.className = "address";
+              liElement.classList.add("success");
+            } else {
+              addrDiv.innerText = "No address found.";
+            }
+          } catch (error) {
+            addrDiv.innerText = "Error connecting to API.";
+            console.error(error);
+          }
+
+          // Take a short break to make the loading effect more visible and avoid spamming the API
+          // (Google Maps API has rate limits, so adding a delay to avoid being blocked)
+          await sleep(350);
+        }
+      }
+    </script>
+  </head>
+  <body onload="fetchAddresses()">
+    <h2>Reverse Geocoding List using Google Maps Geocoding API</h2>
+    <h4>Note: Use your own Google Maps API key in the script tag to fetch addresses.</h4>
+    <a href="reverse_geocoding_list.vi.html">View in Vietnamese</a>
+    <p><a href="top_location_with_many_restaurants_for_test.html">Click here</a> to view the list of addresses from decoded coordinates</p>
+
+    <ul id="location-list"></ul>
+  </body>
+</html>

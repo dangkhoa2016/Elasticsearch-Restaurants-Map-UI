@@ -371,8 +371,7 @@ window.ElasticsearchRestaurants = function() {
   this.show_fav_on_map = function (fav) {
     var t = this;
     var pos = new google.maps.LatLng(fav.lat, fav.lng);
-    t.map.panTo(pos);
-    if (t.map.getZoom() < 15) t.map.setZoom(15);
+    t.map.setOptions({ center: pos, zoom: Math.max(t.map.getZoom(), 15) });
 
     // Use the real marker if this restaurant is in the current search results
     var currentItem = t.arr_list_data.find(function (d) { return d.id === fav.id; });
@@ -548,8 +547,7 @@ window.ElasticsearchRestaurants = function() {
         if ($(e.target).closest('.lv-fav-btn').length) return;
         var mk = t.arr_markers[markerIndex];
         if (!mk) return;
-        t.map.panTo(mk.getPosition());
-        if (t.map.getZoom() < 15) t.map.setZoom(15);
+        t.map.setOptions({ center: mk.getPosition(), zoom: Math.max(t.map.getZoom(), 15) });
         t.infowindow_restaurant.setContent(t.build_restaurant_info_content(item));
         t.infowindow_restaurant.open({ anchor: mk, map: t.map });
         var offcanvas = bootstrap.Offcanvas.getInstance(document.getElementById('list-view-panel'));

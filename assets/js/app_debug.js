@@ -346,8 +346,7 @@ function render_favorites_tab() {
 
 function show_fav_on_map(fav) {
   var pos = new google.maps.LatLng(fav.lat, fav.lng);
-  map.panTo(pos);
-  if (map.getZoom() < 15) map.setZoom(15);
+  map.setOptions({ center: pos, zoom: Math.max(map.getZoom(), 15) });
 
   // Use the real marker if this restaurant is in the current search results
   var currentItem = arr_list_data.find(function (d) { return d.id === fav.id; });
@@ -527,8 +526,7 @@ function render_list_view(items) {
       if ($(e.target).closest('.lv-fav-btn').length) return;
       var mk = arr_markers[markerIndex];
       if (!mk) return;
-      map.panTo(mk.getPosition());
-      if (map.getZoom() < 15) map.setZoom(15);
+      map.setOptions({ center: mk.getPosition(), zoom: Math.max(map.getZoom(), 15) });
       infowindow_restaurant.setContent(build_restaurant_info_content(item));
       infowindow_restaurant.open({ anchor: mk, map });
       var offcanvas = bootstrap.Offcanvas.getInstance(document.getElementById('list-view-panel'));
